@@ -6,7 +6,8 @@ $a->set({ip => {saddr => 'my.site.lan', # insert your site here !
 	 icmp => {type => 8, id => $$}
 	 });  
 $device = 'eth0'; # insert your device here !
-$filt = 'ip proto \\icmp and dst host my.site.lan';# insert your site here!
+# insert your site here!
+$filt = 'ip proto \\icmp and icmp[0]==0 and dst host my.site.lan';
 $size = 1500;
 $tout = 30;
 $pcap = $a->pcapinit($device,$filt,$size,$tout);

@@ -1,4 +1,4 @@
-#if defined  __OpenBSD__ || defined __NetBSD__
+#ifdef  _BPF_
 #include <sys/param.h>
 #endif
 
@@ -34,15 +34,7 @@
 #include <sys/socket.h>
 #include <net/if.h>
 #include <net/if_dl.h>
-#ifdef _BSDI_
-#define CTL_NET 4
-#include <sys/cdefs.h>
-__BEGIN_DECLS
-int	sysctl __P((int *, u_int, void *, size_t *, const void *, size_t));
-__END_DECLS
-#else
 #include <sys/sysctl.h>
-#endif /*_BSDI_*/
 #include <net/route.h>
 #include <netinet/if_ether.h>
 #include <unistd.h>
@@ -126,7 +118,7 @@ nextif:
 
 #endif /*_BPF_*/
 											
-void send_eth_packet(int fd,char* eth_device,u_char *pkt,int len)
+void send_eth_packet(int fd,char* eth_device,u_char *pkt,int len,int flag)
 {
         int retval;
 
@@ -149,11 +141,13 @@ void send_eth_packet(int fd,char* eth_device,u_char *pkt,int len)
 #else	
 
 #ifdef _BSDRAW_
+if(flag){
 ((struct iphdr *)(pkt + 14))->tot_len = htons(((struct iphdr *)(pkt + 14))->tot_len);        
 ((struct iphdr *)(pkt + 14))->frag_off = htons(((struct iphdr *)(pkt + 14))->frag_off);        
 ((struct iphdr *)(pkt + 14))->check = 0;        
 ((struct iphdr *)(pkt + 14))->check = in_cksum((unsigned short*)(pkt + 14),
                                           4*((struct iphdr *)(pkt + 14))->ihl);                
+        }
 #endif
         retval = write(fd,pkt,len);
 #endif

@@ -29,8 +29,8 @@ extern "C" {
 #include "solaris.h"
 #else
 #include <sys/cdefs.h>
-#include "ifaddrlist.h"
 #endif
+#include "ifaddrlist.h"
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <pcap.h>
@@ -408,10 +408,11 @@ SV * ip_opts_creat(ref)
      AV * opts;
      SV * ip_opts;
      char c;
+     STRLEN l;
      if(SvTYPE(SvRV(ref)) == SVt_PVAV) opts = (AV *)SvRV(ref);
      else
      croak("Not array reference\n");
-     ip_opts = newSVpv(SvPV((SV*)&PL_sv_undef,PL_na),0);
+     ip_opts = newSVpv(SvPV((SV*)&PL_sv_undef,l),0);
      len = av_len(opts);
      for(i=0;i<=(len-2);i=i+3){
      switch (SvIV(*av_fetch(opts,i,0))){
@@ -431,7 +432,7 @@ SV * ip_opts_creat(ref)
        sv_catpvn(ip_opts,&c,1);
        c = (char)SvIV(*av_fetch(opts,i+1,0));
        sv_catpvn(ip_opts,&c,1);
-       sv_catpvn(ip_opts,SvPV(*av_fetch(opts,i+2,0),PL_na),
+       sv_catpvn(ip_opts,SvPV(*av_fetch(opts,i+2,0),l),
                          SvCUR(*av_fetch(opts,i+2,0)));
        break;
        default:
@@ -455,6 +456,12 @@ constant(name,arg)
         char *        name
 	int           arg
 
+void 
+closefd(fd)
+int fd
+CODE:
+close(fd);
+
 
 SV * 
 ip_rt_dev(addr)
@@ -471,8 +478,8 @@ CODE:
  len = ip_rt_dev(addr,dev);
  RETVAL = newSVpv(dev,len); 
 #endif
-#ifdef _SOLARIS_
- croak("rdev() is not implemented on Solaris");
+#if !defined(_LINUX_) && !defined(_BPF_)
+ croak("rdev() is not implemented on this system");
 #endif
 OUTPUT:
 RETVAL
@@ -499,11 +506,11 @@ RETVAL
 unsigned int  
 rawsock()
 
+#ifdef _IFLIST_
 
 HV *
 ifaddrlist()
 CODE:
-#ifndef _SOLARIS_
    int c,i;
    char buf[132];
    struct ifaddrlist *al;
@@ -521,11 +528,10 @@ CODE:
 	   	        
    al++;
    }
-#else
-   croak("ifaddrlist() is not implemented on Solaris");
-#endif
 OUTPUT:
 RETVAL
+
+#endif
 
 
 #ifdef _ETH_
@@ -563,12 +569,13 @@ mac
 RETVAL
 
 void 
-send_eth_packet(fd,eth_device,pkt)
+send_eth_packet(fd,eth_device,pkt,flag)
 int fd
 char* eth_device
 SV* pkt
+int flag
 CODE:
- send_eth_packet(fd,eth_device,(u_char*)SvPV(pkt,PL_na),SvCUR(pkt));
+ send_eth_packet(fd,eth_device,(u_char*)SvPV(pkt,PL_na),SvCUR(pkt),flag);
 
 AV * 
 eth_parse(pkt)

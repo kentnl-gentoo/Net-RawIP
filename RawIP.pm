@@ -1,3 +1,4 @@
+# Create sub modules 
 package Net::RawIP::iphdr;
 use Class::Struct qw(struct);
 my @iphdr = qw(version ihl tos tot_len id frag_off ttl protocol check saddr 
@@ -35,6 +36,7 @@ use Class::Struct qw(struct);
 my @ethhdr = qw(dest source proto);
 struct ( 'Net::RawIP::ethhdr' => [map { $_ => '$' } @ethhdr ] );
 
+# Main package 
 package Net::RawIP;
 use Carp;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK $AUTOLOAD);
@@ -61,13 +63,9 @@ timem linkoffset ifaddrlist rdev)
                             ]
 	       );	  	    
 
-$VERSION = '0.06';
+$VERSION = '0.07';
 
 sub AUTOLOAD {
-    # This AUTOLOAD is used to 'autoload' constants from the constant()
-    # XS function.  If a constant is not found then control is passed
-    # to the AUTOLOAD in AutoLoader.
-
     my $constname;
     ($constname = $AUTOLOAD) =~ s/.*:://;
     croak "& not defined" if $constname eq 'constant';
@@ -85,16 +83,22 @@ sub AUTOLOAD {
     goto &$AUTOLOAD;
 }
 bootstrap Net::RawIP $VERSION;
-die "Must have euid = 0 for use Net::RawIP" if $>;
 
-$^W = 0;
+# Warn if called from non-root accounts
+warn "Must have euid = 0 for use Net::RawIP" if $>;
 
+# For prevent spurious warnings
+local $^W = 0;
+
+# The constructor
 sub new {
  my ($proto,$ref) = @_;
  my $class = ref($proto) || $proto;
  my $self = {};
  bless $self,$class;
+# The sub protocol determination (tcp by default) 
  $self->proto($ref);
+# The values by default
  $self->_unpack($ref);;
  return $self
 }
@@ -111,12 +115,15 @@ sub proto {
  return $class->{'proto'}
 }
 
+# IP and TCP options 
 sub optset {
  my($class,%arg) = @_;
+# The number of members in the sub modules
  my %n = ('tcp',17,'udp',5,'icmp',9,'generic',1); 
  my $optproto;
  my $i;
  my $len;
+# Initialize Net::RawIP::opt objects from argument
  map {
     my @array;
     $optproto = $_;
@@ -130,6 +137,7 @@ sub optset {
         } 
     keys %{$arg{$optproto}};
       $i = 0;
+# Count lengths of options 
     map {
 $len = length($class->{"opts$optproto"}->data($i));
 $len = 38 if $len > 38;
@@ -137,6 +145,8 @@ $class->{"opts$optproto"}->len($i,2+$len);
         $i++
         }
      @{${$arg{$optproto}}{'data'}};
+# Fill an array with types,lengths,datas and put the reference of this array  
+# to the sub module as last member   
     $i = 0;
     map { 
     push @array,
@@ -150,6 +160,7 @@ $class->{"opts$optproto"}->len($i,2+$len);
     } 
     ${$class->{"$class->{'proto'}hdr"}}[$i+$n{$class->{'proto'}}] = [(@array)]
  } sort keys %arg;
+# Repacking current packet
 $class->_pack(1);
 }
 
@@ -162,12 +173,14 @@ my $type;
 my %n = ('tcp',17,'udp',5,'icmp',9,'generic',1);
 map {
   $optproto = $_;
+# Get whole array if not specified type of option
   if(!exists ${$arg{"$optproto"}}{'type'}){
   if($optproto eq 'tcp'){$i = 1}
   push @array,
     (@{${$class->{"$class->{'proto'}hdr"}}[$i+$n{$class->{'proto'}}]});
   }
   else 
+# Get array filled with specified options 
   {
     $i = 0;
   map {
@@ -197,10 +210,12 @@ map {
   $optproto = $_;
   if($optproto eq 'tcp'){
   $i = 1;
+# Look at RFC
   $class->{'tcphdr'}->doff(5);
   }
   else 
   {
+# Look at RFC
   $class->{'iphdr'}->ihl(5);
   }
   $class->{"opts$optproto"} = 0;
@@ -209,6 +224,8 @@ map {
 $class->_pack(1);
 }
 
+# An ethernet related initialization
+# We open descriptor and get hardware and IP addresses of device by tap()   
 sub ethnew {
  my($class,$dev,@arg) = @_;
  my($ip,$mac);
@@ -225,6 +242,7 @@ sub ethnew {
 		    .$ipproto;
  $class->ethset(@arg) if @arg;
 }
+
 
 sub ethset {
  my($self,%hash) = @_;
@@ -246,8 +264,8 @@ sub ethset {
                      pack("C6",hex($1),hex($2),hex($3),hex($4),hex($5),hex($6))
 		        );
  $dest = $self->{'ethhdr'}->dest;
- }
- 
+ }  
+# host_to_ip returns IP address of target in host byteorder format
  $self->{'ethhdr'}->source(mac(host_to_ip($source)))
  unless($source =~ /[^A-Za-z0-9\-.]/ && length($source) == 6);
  $self->{'ethhdr'}->dest(mac(host_to_ip($dest)))
@@ -256,6 +274,8 @@ sub ethset {
  $self->{'ethpack'}=$self->{'ethhdr'}->dest.$self->{'ethhdr'}->source.$ipproto;
 }
 
+# Lookup for mac addresse in the ARP cache table 
+# If not successul then send ICMP packet to target and retry lookup
 sub mac {
  my $ip = $_[0];
  my $mac;
@@ -285,14 +305,30 @@ if(!$times){
 $times = 1;
 }
 while($times){
-send_eth_packet($self->{tap},$self->{'ethdev'},
-           $self->{'ethpack'}.$self->{'pack'});
+# The send_eth_packet takes the descriptor,the name of device,the scalar
+# with packed ethernet packet and the flag (0 - non-ip contents,1 - otherwise)  
+send_eth_packet($self->{'tap'},$self->{'ethdev'},
+           $self->{'ethpack'}.$self->{'pack'},1);
 sleep $delay;
 $times--
 }
 } 
 
+# Allow to send any frames
+sub send_eth_frame {
+my ($self,$frame,$delay,$times) = @_;
+if(!$times){
+$times = 1;
+}
+while($times){
+send_eth_packet($self->{'tap'},$self->{'ethdev'},
+           substr($self->{'ethpack'},0,12).$frame,0);
+sleep $delay;
+$times--
+}
+} 
 
+# The initialization with default values
 sub _unpack {
  my ($self,$ref) = @_;
  $self->{'iphdr'} = new Net::RawIP::iphdr;
@@ -334,6 +370,8 @@ my $self = shift;
 if (@_){
 my @array;
 push @array,@{$self->{'iphdr'}},@{$self->{"$self->{'proto'}hdr"}};
+# A low level *_pkt_creat() functions take reference of array 
+# with all of fields of the packet and return properly packed scalar  
 eval '$self->{\'pack\'} = '."$self->{'proto'}".'_pkt_creat (\@array)';
 }
 return $self->{'pack'};
@@ -346,9 +384,11 @@ return $class->_pack
 
 sub set {
 my ($self,$hash) = @_;
+# For handle C union in the ICMP header
 my %un = qw(id sequence unused mtu);
 my %revun = reverse %un;
-my $meth; 
+my $meth; #XXX Why perl doesn't understand simple ->$un{$_}() ? 
+# See Class::Struct
 map {$self->{'iphdr'}->$_(${$hash->{'ip'}}{$_}) } keys %{$hash->{'ip'}}
 if exists $hash->{'ip'};
 map {$self->{"$self->{'proto'}hdr"}->$_(${$hash->{"$self->{'proto'}"}}{$_}) }
@@ -388,9 +428,15 @@ $hash = substr($hash,14);
 @{$self->{'ethhdr'}} = @{eth_parse($self->{'ethpack'})}
   } 
   $self->{'pack'} = $hash;
+# The low level *_pkt_parse() functions take packet and return reference of
+# of the array with fields from this packet
   eval '$array ='."$self->{'proto'}_pkt_parse(".'$hash)'; 
+# Initialization of IP header object
   @{$self->{'iphdr'}} = @$array[0..10];
+# Initialization of sub IP object
  @{$self->{"$self->{'proto'}hdr"}}= @$array[11..(@$array-1)];
+# If last member in the sub object is a reference of 
+# array with options then we have to initialize Net::RawIP::opt 
   if(ref(${$self->{"$self->{'proto'}hdr"}}[$n{$self->{'proto'}}]) eq 'ARRAY'){
  $j = 0;
  $self->{'optsip'} = new Net::RawIP::opt  unless $self->{'optsip'};
@@ -407,6 +453,7 @@ $hash = substr($hash,14);
  $j++;
     }
   }
+# For handle TCP options
  if($self->{'proto'} eq 'tcp'){
   if(ref(${$self->{'tcphdr'}}[18]) eq 'ARRAY'){
 $j = 0;
@@ -446,7 +493,6 @@ my %h;
 
 map { ${$$hash{ethh}}{$_} = '$' } @{$hash->{eth}};
 map { ${$$hash{iph}}{$_} = '$' } @{$hash->{ip}};
-
 map { ${$$hash{"$self->{'proto'}h"}}{$_} = '$' } @{$hash->{"$self->{'proto'}"}}; 
 map {  if ($hash->{'ethh'}->{$_} eq '$') {
                                           if($a) {    
@@ -484,7 +530,6 @@ map { if ($hash->{"$self->{'proto'}h"}->{$_} eq '$') {
   else {
          return {%h}
   }
-
 }
 
 sub send {
@@ -540,8 +585,15 @@ if(($rdev = ip_rt_dev($ipn)) eq 'proc'){
   $rdev = 'lo' unless ($ip & 0xFF000000) ^ 0x7f000000; # For Linux 2.2.x 
 }
   die "rdev(): Destination unreachable" unless $rdev;
+# The aliasing support
   $rdev =~ s/([^:]+)(:.+)?/$1/;
 return $rdev;    
+}
+
+sub DESTROY {
+my $self = shift;
+closefd($self->{'raw'}) if exists $self->{'raw'};
+closefd($self->{'tap'}) if exists $self->{'tap'};
 }
 
 1;
@@ -571,7 +623,7 @@ This package provides a class object which can be used for
 creating, manipulating and sending a raw ip packets with
 optional feature for manipulating ethernet headers.
 
-B<NOTE:> Ethernet related methods now imlemented only on Linux and FreeBSD
+B<NOTE:> Ethernet related methods are implemented on Linux and *BSD only
 
 =head1 Exported constants
 
@@ -631,8 +683,6 @@ by open_live).
 The B<ifaddrlist> function returns a hash reference,in this hash keys are 
 all running network devices,values are ip addresses of those devices 
 in an internet address format.
-
-B<NOTE:> The ifaddrlist function isn't implemented on Solaris.
 
 The B<rdev> function returns a name of the outgoing device for given 
 destination address.
@@ -815,8 +865,15 @@ a B<$device>.
 
 =item B<ethsend>
 
-is a method for send the ethernet frame.
+is a method for send an ethernet frame.
 The given parameters must look like a parameters for the B<send>.
+
+=item B<send_eth_frame>($frame,$times,$delay)
+
+is a method for send any ethernet frame which you may construct by
+hands.B<$frame> is a packed ethernet frame exept destination and
+source fields(these fields can be setting by B<ethset> or B<ethnew>).
+Another parameters must look like the parameters for the B<send>. 
 
 =item B<optset>(OPTPROTO => { type => [...],data => [...] },...)
 

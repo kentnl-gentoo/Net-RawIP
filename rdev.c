@@ -1,22 +1,8 @@
-#if defined _FreeBSD_ || defined _BSDI_ || defined __OpenBSD__ || defined __NetBSD__
-#define HAVE_SOCKADDR_SA_LEN 1
-#endif
-
 #include <sys/param.h>
 #include <sys/file.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
-
-#ifdef _BSDI_
-#define CTL_NET 4
-#include <sys/cdefs.h>
-__BEGIN_DECLS
-int     sysctl __P((int *, u_int, void *, size_t *, const void *, size_t));
-__END_DECLS
-#else
 #include <sys/sysctl.h>
-#endif /*_BSDI_*/
-
 #include <net/if.h>
 #include <net/route.h>
 #include <net/if_dl.h>

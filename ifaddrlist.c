@@ -3,10 +3,6 @@
 #define  __FAVOR_BSD 1
 #endif
 
-#if defined _FreeBSD_ || defined _BSDI_ || defined __OpenBSD__ || defined __NetBSD__ 
-#define HAVE_SOCKADDR_SA_LEN 1
-#endif
-
 #include <sys/param.h>
 #include <sys/file.h>
 #include <sys/ioctl.h>
@@ -20,7 +16,6 @@ struct rtentry;
 
 #include <net/if.h>
 #include <netinet/in.h>
-
 #include <ctype.h>
 #include <errno.h>
 #include <memory.h>
@@ -29,8 +24,11 @@ struct rtentry;
 #include <string.h>
 #include <unistd.h>
 
-
-
+#ifdef _SOLARIS_
+#include <stropts.h>
+#include <sys/sockio.h>
+#include "solaris.h"
+#endif   /* _SOLARIS_ */
 
 #define MAX_IPADDR 32
 
