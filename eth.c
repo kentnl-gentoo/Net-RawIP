@@ -1,3 +1,6 @@
+#include "EXTERN.h"
+#include "perl.h"
+
 #ifdef  _BPF_
 #include <sys/param.h>
 #endif
@@ -152,8 +155,7 @@ if(flag){
         retval = write(fd,pkt,len);
 #endif
 	if (retval < 0) {
-	       perror("send_eth_packet");
-	       exit(1);
+	       croak("send_eth_packet");
 	}       
 }
 
@@ -234,17 +236,15 @@ tap(char *dev,unsigned int *my_eth_ip,unsigned char *my_eth_mac)
 #ifndef _BPF_
 	
         if ((fd = socket(AF_INET, SOCK_PACKET, htons(ETH_P_ALL))) < 0) {
-			perror("(tap) SOCK_PACKET allocation problems [fatal]");
-	        exit(1);					           
+            croak("(tap) SOCK_PACKET allocation problems [fatal]");
 	}
 #else
-        if ((fd = bpf_open()) < 0) exit(1);
+        if ((fd = bpf_open()) < 0) croak("(tap) fd < 0");
         v = 32768;      
         (void) ioctl(fd, BIOCSBLEN, (caddr_t)&v);
         if (ioctl(fd, BIOCSETIF, (caddr_t)&ifr) < 0) {
-                       perror("(tap) BIOCSETIF problems [fatal]");
-                exit(1);
-         }
+            croak("(tap) BIOCSETIF problems [fatal]");
+        }
         s = socket(AF_INET,SOCK_DGRAM,0);
 	if (ioctl(s, SIOCGIFADDR, &ifr) < 0) {
 #endif													    	
@@ -252,13 +252,13 @@ tap(char *dev,unsigned int *my_eth_ip,unsigned char *my_eth_mac)
 #ifndef _BPF_
         if (ioctl(fd, SIOCGIFADDR, &ifr) < 0) {
 
-	perror("(tap) Can't get interface IP address");
         close(fd);
+	    croak("(tap) Can't get interface IP address");
 #else
         close(fd);
         close(s);
 #endif
-        exit(1);
+	    croak("(tap) Can't get interface IP address");
 	}
 	
 *my_eth_ip = ntohl(((struct sockaddr_in*)&ifr.ifr_addr)->sin_addr.s_addr);
@@ -266,17 +266,15 @@ tap(char *dev,unsigned int *my_eth_ip,unsigned char *my_eth_mac)
 #ifndef _BPF_
 
 if (ioctl(fd, SIOCGIFHWADDR, &ifr) < 0) {
-	perror("(tap) Can't get interface HW address");
 	close(fd);
-	exit(1);
+	croak("(tap) Can't get interface HW address");
 	}
 	memcpy(my_eth_mac, ifr.ifr_hwaddr.sa_data,ETH_ALEN);
 #else
         close(s);
 if (!get_ether_addr(((struct sockaddr_in*)&ifr.ifr_addr)->sin_addr.s_addr,
      my_eth_mac)) {
-     perror("(tap) Can't get interface HW address");
-     exit(1);
+     croak("(tap) Can't get interface HW address");
      }
 #endif
 return fd;

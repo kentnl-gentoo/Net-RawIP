@@ -1,5 +1,8 @@
 Revision history for Perl extension Net::RawIP.
 
+0.09d Tue Nov 21 11:47:43 2000
+       -  applied patch from Igal Koshevoy <igal@eBizQuality.com>
+          exit() calls were changed to croak()
 
 0.09c Mon Apr  3 16:12:56 2000
        -  small modification in Makefile.PL to get

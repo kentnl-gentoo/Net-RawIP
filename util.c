@@ -1,3 +1,6 @@
+#include "EXTERN.h"
+#include "perl.h"
+
 #ifdef _SOLARIS_
 #include "solaris.h"
 #else
@@ -99,13 +102,11 @@ int rawsock(void)
 
     
 	if ((fd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW)) < 0) {
-			perror("\n(rawsock) Socket problems [fatal]");
-		exit(1);
+        croak("(rawsock) socket problems [fatal]");
 	}  
 
 	if (setsockopt(fd, IPPROTO_IP, IP_HDRINCL, &val, sizeof(val)) < 0) {  
-        		perror("Cannot set IP_HDRINCL socket option");
-		exit(1);
+        croak("Cannot set IP_HDRINCL socket option");
 	}
 	return fd;
 }	
@@ -119,8 +120,7 @@ host_to_ip (char *host_name)
 
   if ((target = gethostbyname (host_name)) == NULL)
     {
-      fprintf (stderr, "host_to_ip: %d\n", h_errno);
-      exit (-1);
+      croak("host_to_ip: failed");
     }
   else
     {
@@ -135,9 +135,8 @@ pkt_send (int fd, unsigned char * sock,u_char *pkt,int size)
 
   if (sendto (fd, (const void *)pkt,size, 0, (const struct sockaddr *) sock, sizeof (struct sockaddr)) < 0)
     {
-      perror ("sendto()");
       close (fd);
-      exit (-1);
+      croak("sendto()");
     }
 }
 

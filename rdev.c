@@ -1,3 +1,6 @@
+#include "EXTERN.h"
+#include "perl.h"
+
 #include <sys/param.h>
 #include <sys/file.h>
 #include <sys/socket.h>
@@ -118,16 +121,13 @@ ip_rt_dev(u_int32_t addr,u_char *name)
 	mib[4] = NET_RT_DUMP;
 	mib[5] = 0;		
 	if (sysctl(mib, 6, NULL, &needed, NULL, 0) < 0){
-		perror("route-sysctl-estimate");
-                exit(-1);
+		croak("route-sysctl-estimate");
         }
 	if ((buf = malloc(needed)) == NULL){
-		perror("malloc");
-                exit(-1);
+		croak("malloc");
         } 
 	if (sysctl(mib, 6, buf, &needed, NULL, 0) < 0){
-		 perror("route-sysctl-get");
-                 exit(-1);
+		croak("route-sysctl-get");
         }
 	lim = buf + needed;
 	for (next = buf; next < lim; next += rtm->rtm_msglen) {
