@@ -32,9 +32,10 @@ extern "C" {
 #endif
 #include <sys/types.h>
 #include <sys/socket.h>
-#include "pcap.h"
-#include "netinet/in.h"
-#include "sys/time.h"
+#include <pcap.h>
+#include <netinet/in.h>
+#include <sys/time.h>
+
 
 #ifdef _ETH_
 
@@ -161,6 +162,7 @@ unsigned short in_cksum(unsigned short *ptr, int nbytes);
 int rawsock(void);
 u_long host_to_ip (char *host_name);
 void pkt_send(int fd, unsigned char *sock,u_char *pkt,int size);
+int linkoffset(int);
  
 static int
 not_here(s)
@@ -456,22 +458,18 @@ constant(name,arg)
 SV *
 timem ()
 CODE:
-struct timeval *tv;
-struct timezone *tz;
-New(601,tv,1,struct timeval);
-New(601,tz,1,struct timezone);
-tz->tz_minuteswest = 0;
-tz->tz_dsttime = 0;
-if((gettimeofday(tv,tz) < 0)) { 
+struct timeval tv;
+struct timezone tz;
+tz.tz_minuteswest = 0;
+tz.tz_dsttime = 0;
+if((gettimeofday(&tv,&tz) < 0)) { 
 RETVAL = newSViv(0);
 croak("gettimeofday()");
 }
 else
 {
-RETVAL = newSVpvf("%u.%u",tv->tv_sec,tv->tv_usec);
+RETVAL = newSVpvf("%u.%06u",tv.tv_sec,tv.tv_usec);
 }
-Safefree(tv);
-Safefree(tz); 
 OUTPUT:
 RETVAL
 
@@ -659,7 +657,7 @@ CODE:
   av_store(RETVAL,8,newSViv(ntohs(pktr->ih.check)));
   av_store(RETVAL,9,newSViv(ntohl(pktr->ih.saddr)));
   av_store(RETVAL,10,newSViv(ntohl(pktr->ih.daddr)));
-  if(ihl != 5){
+  if(ihl > 5){
     av_store(RETVAL,20,
     ip_opts_parse(sv_2mortal(newSVpv((u_char*)pktr + 20,ihl*4 - 20))));  
     (u_char*)pktr = (u_char*)pktr + (ihl*4 - 20);  
@@ -733,7 +731,7 @@ CODE:
   av_store(RETVAL,8,newSViv(ntohs(pktr->ih.check)));
   av_store(RETVAL,9,newSViv(ntohl(pktr->ih.saddr)));
   av_store(RETVAL,10,newSViv(ntohl(pktr->ih.daddr)));
-  if(ihl != 5){
+  if(ihl > 5){
     av_store(RETVAL,16,
     ip_opts_parse(sv_2mortal(newSVpv((u_char*)pktr + 20,ihl*4 - 20))));  
     (u_char*)pktr = (u_char*)pktr + (ihl*4 - 20);  
@@ -751,13 +749,14 @@ SV *
 udp_pkt_creat(p)
   SV * p
 CODE:
-   int opt;
+   int opt,iplen;
    SV * ip_opts;
    u_char * ptr;
    AV * pkt;
    IUPKT piu;
    u_char *piur;
    opt = 0;
+   iplen = 20;
    if(SvTYPE(SvRV(p)) == SVt_PVAV) pkt = (AV *)SvRV(p);
    else
    croak("Not array reference\n");
@@ -765,8 +764,8 @@ CODE:
    piu.ih.ihl = SvIV(*av_fetch(pkt,1,0));
    piu.ih.tos = SvIV(*av_fetch(pkt,2,0));
    piu.ih.tot_len = BSDFIX(SvIV(*av_fetch(pkt,3,0)));
-   if(!piu.ih.tot_len)
-   piu.ih.tot_len = BSDFIX(4*piu.ih.ihl + 8 + SvCUR(*av_fetch(pkt,15,0))); 
+   if(!piu.ih.tot_len) 
+   piu.ih.tot_len = BSDFIX(iplen + 8 + SvCUR(*av_fetch(pkt,15,0))); 
    piu.ih.id = htons(SvIV(*av_fetch(pkt,4,0)));
    piu.ih.frag_off = BSDFIX(SvIV(*av_fetch(pkt,5,0)));
    piu.ih.ttl = SvIV(*av_fetch(pkt,6,0));
@@ -774,10 +773,11 @@ CODE:
    piu.ih.check = htons(SvIV(*av_fetch(pkt,8,0)));
    piu.ih.saddr = htonl(SvIV(*av_fetch(pkt,9,0)));
    piu.ih.daddr = htonl(SvIV(*av_fetch(pkt,10,0)));
-   if(!piu.ih.check) piu.ih.check = in_cksum((unsigned short *)&piu,4*piu.ih.ihl); 
+   if(!piu.ih.check) piu.ih.check = in_cksum((unsigned short *)&piu,iplen); 
    piu.uh.source = htons(SvIV(*av_fetch(pkt,11,0)));
    piu.uh.dest = htons(SvIV(*av_fetch(pkt,12,0)));
    piu.uh.len = htons(SvIV(*av_fetch(pkt,13,0)));
+   if(!piu.uh.len) piu.uh.len = htons(8 + SvCUR(*av_fetch(pkt,15,0))); 
    piu.uh.check = htons(SvIV(*av_fetch(pkt,14,0)));
    if(av_fetch(pkt,16,0)){
       if(SvROK(*av_fetch(pkt,16,0))){
@@ -785,12 +785,13 @@ CODE:
     ip_opts = ip_opts_creat(*av_fetch(pkt,16,0));
     piu.ih.ihl = 5 + SvCUR(ip_opts)/4;
     piu.ih.tot_len = BSDFIX(4*piu.ih.ihl + 8 + SvCUR(*av_fetch(pkt,15,0)));
+    iplen = 4*piu.ih.ihl;
     piu.ih.check = 0;
-    ptr = (u_char*)safemalloc(4*piu.ih.ihl + 8);
+    ptr = (u_char*)safemalloc(iplen + 8);
     memcpy(ptr,(u_char*)&piu,20);
     memcpy(ptr+20,SvPV(ip_opts,PL_na),SvCUR(ip_opts));
     memcpy(ptr+20+SvCUR(ip_opts),(u_char*)&piu + 20,8);
-    ((struct iphdr*)ptr)->check = in_cksum((unsigned short *)ptr,4*piu.ih.ihl);
+    ((struct iphdr*)ptr)->check = in_cksum((unsigned short *)ptr,iplen);
     RETVAL = newSVpv((u_char*)ptr,sizeof(IUPKT)+SvCUR(ip_opts));
     sv_catsv(RETVAL,*av_fetch(pkt,15,0));
     Safefree(ptr);
@@ -803,10 +804,10 @@ CODE:
    }
    if(!piu.uh.check) {
    piur = SvPV(RETVAL,PL_na);
-   ((struct udphdr*)(piur + 4*piu.ih.ihl))->check = 
-   ip_in_cksum((struct iphdr *)piur,(unsigned short *)(piur + 4*piu.ih.ihl),
+   ((struct udphdr*)(piur + iplen))->check = 
+   ip_in_cksum((struct iphdr *)piur,(unsigned short *)(piur + iplen),
                                                8 + SvCUR(*av_fetch(pkt,15,0)));
-   sv_setpvn(RETVAL,(u_char*)piur,4*piu.ih.ihl+ 8 + SvCUR(*av_fetch(pkt,15,0)));
+   sv_setpvn(RETVAL,(u_char*)piur,iplen + 8 + SvCUR(*av_fetch(pkt,15,0)));
    }          
 OUTPUT:
 RETVAL  
@@ -816,13 +817,14 @@ SV *
 icmp_pkt_creat(p)
   SV * p
 CODE:
-   int opt;
+   int opt,iplen;
    SV * ip_opts;
    u_char * ptr;
    AV * pkt;
    IIPKT pii;
    u_char *piir;
    opt = 0;
+   iplen = 20;
    if(SvTYPE(SvRV(p)) == SVt_PVAV) pkt = (AV *)SvRV(p);
    else
    croak("Not array reference\n");
@@ -831,7 +833,7 @@ CODE:
    pii.ih.tos = SvIV(*av_fetch(pkt,2,0));
    pii.ih.tot_len = BSDFIX(SvIV(*av_fetch(pkt,3,0)));
    if(!pii.ih.tot_len)
-   pii.ih.tot_len = BSDFIX(4*pii.ih.ihl + 8 + SvCUR(*av_fetch(pkt,19,0))); 
+   pii.ih.tot_len = BSDFIX(iplen + 8 + SvCUR(*av_fetch(pkt,19,0))); 
    pii.ih.id = htons(SvIV(*av_fetch(pkt,4,0)));
    pii.ih.frag_off = BSDFIX(SvIV(*av_fetch(pkt,5,0)));
    pii.ih.ttl = SvIV(*av_fetch(pkt,6,0));
@@ -839,7 +841,7 @@ CODE:
    pii.ih.check = htons(SvIV(*av_fetch(pkt,8,0)));
    pii.ih.saddr = htonl(SvIV(*av_fetch(pkt,9,0)));
    pii.ih.daddr = htonl(SvIV(*av_fetch(pkt,10,0)));
-   if(!pii.ih.check) pii.ih.check = in_cksum((unsigned short *)&pii,4*pii.ih.ihl); 
+   if(!pii.ih.check) pii.ih.check = in_cksum((unsigned short *)&pii,iplen); 
    pii.ich.type = SvIV(*av_fetch(pkt,11,0));
    pii.ich.code = SvIV(*av_fetch(pkt,12,0));
    pii.ich.checksum = htons(SvIV(*av_fetch(pkt,13,0)));
@@ -849,13 +851,14 @@ CODE:
     opt++;
     ip_opts = ip_opts_creat(*av_fetch(pkt,20,0));
     pii.ih.ihl = 5 + SvCUR(ip_opts)/4;
-    pii.ih.tot_len = BSDFIX(4*pii.ih.ihl + 8 + SvCUR(*av_fetch(pkt,19,0)));
+    iplen = 4*pii.ih.ihl;
+    pii.ih.tot_len = BSDFIX(iplen + 8 + SvCUR(*av_fetch(pkt,19,0)));
     pii.ih.check = 0;
-    ptr = (u_char*)safemalloc(4*pii.ih.ihl + 8);
+    ptr = (u_char*)safemalloc(iplen + 8);
     memcpy(ptr,(u_char*)&pii,20);
     memcpy(ptr+20,SvPV(ip_opts,PL_na),SvCUR(ip_opts));
     memcpy(ptr+20+SvCUR(ip_opts),(u_char*)&pii + 20,8);
-    ((struct iphdr*)ptr)->check = in_cksum((unsigned short *)ptr,4*pii.ih.ihl);
+    ((struct iphdr*)ptr)->check = in_cksum((unsigned short *)ptr,iplen);
     RETVAL = newSVpv((u_char*)ptr,sizeof(IIPKT)+SvCUR(ip_opts));
     sv_catsv(RETVAL,*av_fetch(pkt,19,0));
     Safefree(ptr);
@@ -868,9 +871,9 @@ CODE:
    }
    if(!pii.ich.checksum) {
    piir = SvPV(RETVAL,PL_na);
-   ((struct icmphdr*)(piir + 4*pii.ih.ihl))->checksum = 
-   in_cksum((unsigned short *)(piir + 4*pii.ih.ihl),8 + SvCUR(*av_fetch(pkt,19,0)));
-    sv_setpvn(RETVAL,(u_char*)piir,4*pii.ih.ihl+ 8 + SvCUR(*av_fetch(pkt,19,0)));
+   ((struct icmphdr*)(piir + iplen))->checksum = 
+   in_cksum((unsigned short *)(piir + iplen),8 + SvCUR(*av_fetch(pkt,19,0)));
+    sv_setpvn(RETVAL,(u_char*)piir,iplen + 8 + SvCUR(*av_fetch(pkt,19,0)));
    }          
 OUTPUT:
 RETVAL  
@@ -879,12 +882,13 @@ SV *
 generic_pkt_creat(p)
   SV * p
 CODE:
-   int opt;
+   int opt,iplen;
    SV * ip_opts;
    AV * pkt;
    struct iphdr ih;
    u_char *pigr;
    opt = 0;
+   iplen = 20;
    if(SvTYPE(SvRV(p)) == SVt_PVAV) pkt = (AV *)SvRV(p);
    else
    croak("Not array reference\n");
@@ -893,7 +897,7 @@ CODE:
    ih.tos = SvIV(*av_fetch(pkt,2,0));
    ih.tot_len = BSDFIX(SvIV(*av_fetch(pkt,3,0)));
    if(!ih.tot_len)
-   ih.tot_len = BSDFIX(4*ih.ihl + SvCUR(*av_fetch(pkt,11,0))); 
+   ih.tot_len = BSDFIX(iplen + SvCUR(*av_fetch(pkt,11,0))); 
    ih.id = htons(SvIV(*av_fetch(pkt,4,0)));
    ih.frag_off = BSDFIX(SvIV(*av_fetch(pkt,5,0)));
    ih.ttl = SvIV(*av_fetch(pkt,6,0));
@@ -901,25 +905,26 @@ CODE:
    ih.check = htons(SvIV(*av_fetch(pkt,8,0)));
    ih.saddr = htonl(SvIV(*av_fetch(pkt,9,0)));
    ih.daddr = htonl(SvIV(*av_fetch(pkt,10,0)));
-   if(!ih.check) ih.check = in_cksum((unsigned short *)&ih,4*ih.ihl); 
+   if(!ih.check) ih.check = in_cksum((unsigned short *)&ih,iplen); 
    if(av_fetch(pkt,12,0)){
       if(SvROK(*av_fetch(pkt,12,0))){
     opt++;
     ip_opts = ip_opts_creat(*av_fetch(pkt,12,0));
-    ih.ihl = 5 + SvCUR(ip_opts)/4;
-    ih.tot_len = BSDFIX(4*ih.ihl + SvCUR(*av_fetch(pkt,11,0)));
+    if(ih.ihl <= 5) ih.ihl = 5 + SvCUR(ip_opts)/4;
+    iplen = 20 + SvCUR(ip_opts);
+    if(!ih.tot_len) ih.tot_len = BSDFIX(20 + SvCUR(ip_opts) + SvCUR(*av_fetch(pkt,11,0)));
     ih.check = 0;
     RETVAL = newSVpv((u_char*)&ih,20);
     sv_catsv(RETVAL,ip_opts);
     pigr = SvPV(RETVAL,PL_na);
-    ((struct iphdr*)pigr)->check = in_cksum((unsigned short *)pigr,4*ih.ihl);
-    sv_setpvn(RETVAL,(u_char*)pigr,4*ih.ihl);
+    ((struct iphdr*)pigr)->check = in_cksum((unsigned short *)pigr,iplen);
+    sv_setpvn(RETVAL,(u_char*)pigr,iplen);
     sv_catsv(RETVAL,*av_fetch(pkt,11,0));
     sv_2mortal(ip_opts);
      }
    }
    if(!opt) {
-   RETVAL = newSVpv((u_char*)&ih,20);
+   RETVAL = newSVpv((u_char*)&ih,iplen);
    sv_catsv(RETVAL,*av_fetch(pkt,11,0));
    }
 OUTPUT:
@@ -929,7 +934,7 @@ SV *
 tcp_pkt_creat(p)
   SV * p
 CODE:
-   int  ipo,opt;
+   int  ipo,opt,iplen;
    AV * pkt;
    SV * ip_opts;
    SV * tcp_opts;
@@ -939,6 +944,7 @@ CODE:
    u_char *pitr;
    ipo = 0;
    opt = 0;
+   iplen = 20;
    if(SvTYPE(SvRV(p)) == SVt_PVAV) pkt = (AV *)SvRV(p);
    else
    croak("Not array reference\n");
@@ -947,7 +953,7 @@ CODE:
    pit.ih.tos = SvIV(*av_fetch(pkt,2,0));
    pit.ih.tot_len = BSDFIX(SvIV(*av_fetch(pkt,3,0)));
    if(!pit.ih.tot_len)
-   pit.ih.tot_len = BSDFIX(4*pit.ih.ihl + TCPHDR + SvCUR(*av_fetch(pkt,27,0))); 
+   pit.ih.tot_len = BSDFIX(iplen + TCPHDR + SvCUR(*av_fetch(pkt,27,0))); 
    pit.ih.id = htons(SvIV(*av_fetch(pkt,4,0)));
    pit.ih.frag_off = BSDFIX(SvIV(*av_fetch(pkt,5,0)));
    pit.ih.ttl = SvIV(*av_fetch(pkt,6,0));
@@ -955,7 +961,7 @@ CODE:
    pit.ih.check = htons(SvIV(*av_fetch(pkt,8,0)));
    pit.ih.saddr = htonl(SvIV(*av_fetch(pkt,9,0)));
    pit.ih.daddr = htonl(SvIV(*av_fetch(pkt,10,0)));
-   if(!pit.ih.check) pit.ih.check = in_cksum((unsigned short *)&pit,4*pit.ih.ihl); 
+   if(!pit.ih.check) pit.ih.check = in_cksum((unsigned short *)&pit,iplen); 
    pit.th.source = htons(SvIV(*av_fetch(pkt,11,0)));
    pit.th.dest = htons(SvIV(*av_fetch(pkt,12,0)));
    pit.th.seq = htonl(SvIV(*av_fetch(pkt,13,0)));
@@ -978,6 +984,7 @@ CODE:
     ip_opts = ip_opts_creat(*av_fetch(pkt,28,0));
     pit.ih.ihl = 5 + SvCUR(ip_opts)/4;
     pit.ih.tot_len = BSDFIX(4*pit.ih.ihl + TCPHDR + SvCUR(*av_fetch(pkt,27,0)));
+    iplen = 4*pit.ih.ihl;
     pit.ih.check = 0;
     ptr = (u_char*)safemalloc(4*pit.ih.ihl + TCPHDR);
     memcpy(ptr,(u_char*)&pit,20);
@@ -1000,8 +1007,8 @@ CODE:
                                                 SvCUR(*av_fetch(pkt,27,0)));
      ((struct iphdr*)ptr)->tot_len = BSDFIX(SvCUR(RETVAL) + SvCUR(tcp_opts)); 
      ((struct iphdr*)ptr)->check = 0;
-     ((struct iphdr*)ptr)->check = in_cksum((unsigned short *)ptr,4*pit.ih.ihl);
-     ((struct tcphdr*)(ptr + 4*pit.ih.ihl))->doff = 5 + SvCUR(tcp_opts)/4; 
+     ((struct iphdr*)ptr)->check = in_cksum((unsigned short *)ptr,iplen);
+     ((struct tcphdr*)(ptr + iplen))->doff = 5 + SvCUR(tcp_opts)/4; 
      memcpy(tptr,ptr,SvCUR(RETVAL)-SvCUR(*av_fetch(pkt,27,0)));
      memcpy(tptr+(SvCUR(RETVAL)-SvCUR(*av_fetch(pkt,27,0))),
                             SvPV(tcp_opts,PL_na),SvCUR(tcp_opts));
@@ -1012,7 +1019,7 @@ CODE:
      else {
      pit.ih.tot_len = BSDFIX(40+SvCUR(tcp_opts)+SvCUR(*av_fetch(pkt,27,0)));
      pit.ih.check = 0;
-     pit.ih.check = in_cksum((unsigned short *)&pit,4*pit.ih.ihl);
+     pit.ih.check = in_cksum((unsigned short *)&pit,iplen);
      pit.th.doff = 5 + SvCUR(tcp_opts)/4;
      tptr = (u_char*)safemalloc(40+SvCUR(tcp_opts));
      memcpy(tptr,&pit,40);
@@ -1031,12 +1038,12 @@ CODE:
    }
    if(!pit.th.check) {
    pitr = SvPV(RETVAL,PL_na);
-   ((struct tcphdr*)(pitr + 4*pit.ih.ihl))->check = 
-   ip_in_cksum((struct iphdr *)pitr,(unsigned short *)(pitr + 4*pit.ih.ihl),
-                          4*((struct tcphdr*)(pitr + 4*pit.ih.ihl))->doff + 
+   ((struct tcphdr*)(pitr + iplen))->check = 
+   ip_in_cksum((struct iphdr *)pitr,(unsigned short *)(pitr + iplen),
+                          4*((struct tcphdr*)(pitr + iplen))->doff + 
                                                 SvCUR(*av_fetch(pkt,27,0)));
-   sv_setpvn(RETVAL,(u_char*)pitr,4*pit.ih.ihl+
-   4*((struct tcphdr*)(pitr + 4*pit.ih.ihl))->doff + SvCUR(*av_fetch(pkt,27,0)));
+   sv_setpvn(RETVAL,(u_char*)pitr,iplen+
+   4*((struct tcphdr*)(pitr + iplen))->doff + SvCUR(*av_fetch(pkt,27,0)));
    }         
 OUTPUT:
 RETVAL  
@@ -1163,7 +1170,15 @@ CODE:
 OUTPUT: 
 fp
 RETVAL
-      
+
+int
+linkoffset(p)
+    pcap_t * p
+CODE:
+  RETVAL = linkoffset(pcap_datalink(p));
+OUTPUT:
+RETVAL
+        
 int 
 pcap_setfilter(p,fp)
    pcap_t *p

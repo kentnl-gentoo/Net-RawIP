@@ -1,5 +1,34 @@
 Revision history for Perl extension Net::RawIP.
 
+0.05  Wed Feb  3 16:20:17 1999
+       -  has been added README.DEV - readme for the developers.       
+
+0.04e Tue Feb  2 13:46:37 1999
+       -  have been added some defines in the util.c for compability
+          with an old libpcap. Thanks to Seth <seth@freebie.dp.ny.frb.org> 
+
+0.04d Tue Feb  2 10:26:54 1999
+       -  has been implemented the function called "linkoffset"
+       -  reworked the functions which related to the send side
+          for more flexibility
+       -  reworked the man page. I'd try to catch bugs in my
+          horrible english ;))   	  
+       -  small rework in the timem()    
+       -  fixed bug in the "send" method related to the generic subclass
+       -  has been added the traceroute script
+       -  has been added the oshare script
+       
+0.04c Thu Jan 28 15:47:45 1999
+       -  fix bug in timem() reported by mci@gw.al.lg.ua  
+       -  fix typo bug in the "get" method related to the generic subclass
+
+0.04b Thu Jan 28 09:40:47
+       -  fixes in the pod documentation 
+
+0.04a Wed Jan 27 08:55:28 1999
+       -  fix small bug in udp_pkt_creat reported by
+          Michail Litvak <mci@gw.al.lg.ua>      
+
 0.04  Mon Jan 25 09:27:50 1999
        -  port to BSDI and probably to other *BSD 
           Thanks for help to TTSG <ttsg@ttsg.com>

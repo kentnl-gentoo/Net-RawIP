@@ -17,6 +17,19 @@
 #include <stdio.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <pcap.h>
+
+#ifndef DLT_RAW
+#define DLT_RAW  12
+#endif
+
+#ifndef DLT_SLIP_BSDOS 
+#define DLT_SLIP_BSDOS  13
+#endif
+
+#ifndef DLT_PPP_BSDOS
+#define DLT_PPP_BSDOS   14 
+#endif
 
 
 struct iphdr
@@ -153,4 +166,33 @@ pkt_send (int fd, unsigned char * sock,u_char *pkt,int size)
       close (fd);
       exit (-1);
     }
+}
+
+int
+linkoffset(int type)
+
+{
+	switch (type) {
+
+	case DLT_EN10MB:
+		return 14;
+	case DLT_SLIP:
+		return 16;
+	case DLT_SLIP_BSDOS:
+		return 24;
+	case DLT_NULL:
+		return 4;
+	case DLT_PPP:
+		return 4;
+	case DLT_PPP_BSDOS:
+		return 24;
+	case DLT_FDDI:
+		return 21;
+	case DLT_IEEE802:
+		return 22;
+	case DLT_ATM_RFC1483:
+		return 8;
+	case DLT_RAW:
+		return 0;
+	}
 }

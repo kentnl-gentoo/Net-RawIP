@@ -43,7 +43,7 @@ require DynaLoader;
 require AutoLoader;
 @ISA = qw(Exporter DynaLoader);
 
-@EXPORT = qw(timem open_live dump_open dispatch dump loop);
+@EXPORT = qw(timem open_live dump_open dispatch dump loop linkoffset);
 @EXPORT_OK = qw(
 PCAP_ERRBUF_SIZE PCAP_VERSION_MAJOR PCAP_VERSION_MINOR lib_pcap_h
 open_live open_offline dump_open lookupdev lookupnet dispatch
@@ -54,11 +54,12 @@ qw(
 PCAP_ERRBUF_SIZE PCAP_VERSION_MAJOR PCAP_VERSION_MINOR lib_pcap_h
 open_live open_offline dump_open lookupdev lookupnet dispatch
 loop dump compile setfilter next datalink snapshot is_swapped major_version
-minor_version stats file fileno perror geterr strerror close dump_close timem)  
+minor_version stats file fileno perror geterr strerror close dump_close timem 
+linkoffset)  
                             ]
 	       );	  	    
 
-$VERSION = '0.04';
+$VERSION = '0.05';
 
 sub AUTOLOAD {
     # This AUTOLOAD is used to 'autoload' constants from the constant()
@@ -194,7 +195,7 @@ map {
   $optproto = $_;
   if($optproto eq 'tcp'){
   $i = 1;
-  $class->{'tcphdr'}->doff(5);
+  $class->{'tcphdr'}->doff(0);
   }
   else 
   {
@@ -427,27 +428,61 @@ $j = 0;
 
 sub get {
 my ($self,$hash) = @_;
+my $a = wantarray;
 my @iphdr = qw(version ihl tos tot_len id frag_off ttl protocol check saddr 
 daddr);
 my @tcphdr = qw(source dest seq ack_seq doff res1 res2 urg ack psh rst syn
 fin window check urg_ptr data);
 my @udphdr = qw(source dest len check data);
 my @icmphdr = qw(type code check gateway id sequence unused mtu data);
+my @generichdr = qw(data);
 my @ethhdr = qw(dest source proto);
-my %ref = ('tcp',\@tcphdr,'udp',\@udphdr,'icmp',\@icmphdr);
+my %ref =
+('tcp',\@tcphdr,'udp',\@udphdr,'icmp',\@icmphdr,'generic',\@generichdr);
 my @array;
+my %h;
+
 map { ${$$hash{ethh}}{$_} = '$' } @{$hash->{eth}};
 map { ${$$hash{iph}}{$_} = '$' } @{$hash->{ip}};
 
 map { ${$$hash{"$self->{'proto'}h"}}{$_} = '$' } @{$hash->{"$self->{'proto'}"}}; 
-map { push @array,$self->{'ethhdr'}->$_() if $hash->{'ethh'}->{$_} eq '$'
+map {  if ($hash->{'ethh'}->{$_} eq '$') {
+                                          if($a) {    
+			                    push @array,$self->{'ethhdr'}->$_()
+					  }
+					  else   {
+			                    $h{$_} = $self->{'ethhdr'}->$_()
+					  }  
+					 }
 } @ethhdr if exists $hash->{'eth'};
-map { push @array,$self->{'iphdr'}->$_() if $hash->{'iph'}->{$_} eq '$'
+
+map {  if ($hash->{'iph'}->{$_} eq '$') {
+                                          if($a) {    
+			                    push @array,$self->{'iphdr'}->$_()
+					  }
+					  else   {
+			                    $h{$_} = $self->{'iphdr'}->$_()
+					  }  
+					 }
 } @iphdr if exists $hash->{'ip'};
-map { push @array,$self->{"$self->{'proto'}hdr"}->$_()
-      if $hash->{"$self->{'proto'}h"}->{$_} eq '$' 
-    } @{$ref{"$self->{'proto'}"}} if exists $hash->{"$self->{'proto'}"};
-return (@array);
+
+map { if ($hash->{"$self->{'proto'}h"}->{$_} eq '$') {
+                                          if($a) {    
+                                push @array,$self->{"$self->{'proto'}hdr"}->$_()
+					  }
+					  else   {
+			        $h{$_} = $self->{"$self->{'proto'}hdr"}->$_()
+					  }  
+					 }
+} @{$ref{"$self->{'proto'}"}} if exists $hash->{"$self->{'proto'}"};
+
+  if($a){
+         return (@array);
+  }
+  else {
+         return {%h}
+  }
+
 }
 
 sub send {
@@ -456,7 +491,7 @@ if(!$times){
 $times = 1;
 }
 $self->{'raw'} = rawsock() unless $self->{'raw'};
-if($self->{'proto'} eq 'icmp'){
+if($self->{'proto'} eq 'icmp' || $self->{'proto'} eq 'generic'){
 $self->{'sock'} = set_sockaddr($self->{'iphdr'}->daddr,0);
 }
 else{
@@ -543,20 +578,28 @@ strerror
 close
 dump_close
 timem
+linkoffset
 
-By default exported functions is a B<loop>,B<dispatch>,B<dump_open>,
-B<dump>,B<open_live>,B<timem>. Use export tag B<pcap> for export all pcap 
-functions.
-Please read the docs for libpcap.
-Exported functions B<loop> and B<dispatch> can run perl code refs
-as callback for packet analyzing and printing.
-If B<dump_open> open and return a valid file descriptor,this descriptor can be 
-used in perlcallback as perl filehandle.Also fourth parameter for loop and 
-dispatch can be array or hash reference and it can be unreferensed in perl 
-callback. Function B<next> return a string scalar (next packet).Function 
-B<timem()> return a string scalar which looking like B<sec>.B<microsec>, 
-where B<sec> and B<microsec> is values returned by gettimeofday(3).
-Please look at examples.
+By default exported functions are the B<loop>,B<dispatch>,B<dump_open>,
+B<dump>,B<open_live>,B<timem>,B<linkoffset>. You have to use the export tag 
+B<pcap> for export all of the pcap functions.
+Please read the docs for the libpcap.
+The exported functions the B<loop> and the B<dispatch> can run a perl code refs
+as a callbacks for packet analyzing and printing.
+If B<dump_open> opens and returns a valid file descriptor,this descriptor can be 
+used in the perl callback as a perl filehandle.Also fourth parameter for loop and 
+dispatch can be an array or a hash reference and it can be unreferensed in a perl 
+callback. The function B<next> returns a string scalar (next packet).Function 
+B<timem()> returns a string scalar which looking like B<sec>.B<microsec>, 
+where the B<sec> and the B<microsec> are the values which returned by gettimeofday(3) ,
+if B<microsec> is less than 100000 then zeros will be added to the left side of
+B<microsec> for adjusting to six digits. 
+The function which called B<linkoffset> returns a number of the bytes
+in the link protocol header e.g. 14 for a Ethernet or 4 for a Point-to-Point
+protocol.This function has one input parameter (pcap_t* which is returned
+by open_live). 
+
+Please look at the examples.
 
 =head1 CONSTRUCTOR
 
@@ -565,36 +608,65 @@ B<C<new>>   ({
               ARGPROTO => {PROTOKEY => PROTOVALUE,...} 
 	  })	      
 
-B<C<ip>> is a key of hash which value is a reference of hash with 
-parameters iphdr in current ip packet.
+The B<C<ip>> is the key of the hash which value is a reference of the hash with 
+parameters of the iphdr in the current IP packet.
 
-B<C<IPKEY>> is one of they (B<version> B<ihl> B<tos> B<tot_len> B<id>
+The B<C<IPKEY>> is one of they (B<version> B<ihl> B<tos> B<tot_len> B<id>
 B<frag_off> B<ttl> B<protocol> B<check> B<saddr> B<daddr>).
-You may specify all parameters even B<check>.If you not specify parameter,
-default value is used.Default values is (4,5,16,0,0,0x4000,64,6,0,0,0).
-Of course checksum will be calculated if you not specify non-zero value.
-Values of B<saddr> and B<daddr> may look like www.oracle.com or
-205.227.44.16, even this may look like integer  if you know how
-look 205.227.44.16 as unsigned int ;). 
+You can to specify all parameters,even B<check>.If you do not specify parameter,
+then value by default will be used.
+Of course the checksum will be calculated if you do not specify non-zero value
+for it.
+The values of the B<saddr> and the B<daddr> can be like www.oracle.com or
+205.227.44.16, even they can be an integer  if you know what is 205.227.44.16 
+as an unsigned int in the host format ;). 
 
-B<C<ARGPROTO>> is one of they (B<tcp> B<udp> B<icmp> B<generic>),
-this key define subclass of Net::RawIP. Default value is tcp. 
+The B<C<ARGPROTO>> is one of they (B<tcp> B<udp> B<icmp> B<generic>),
+this key has used for B<DEFINE> subclass of the Net::RawIP. B<If you not
+specify a ARGPROTO then by default value is the tcp>. 
 
+You B<HAVE TO> initialize the subclass of the Net::RawIP object before use.
 
-B<C<PROTOKEY>> is one of (B<source> B<dest> B<seq> B<ack_seq> B<doff> 
+Here is a code for initializing the udp subclass in the Net::RawIP object.
+
+$a = new Net::RawIP({udp =>{}});
+
+or
+
+$a = new Net::RawIP({ip => { tos => 22 }, udp => { source => 22,dest =>23 } });
+ 
+
+You could B<NOT> change the subclass in the object after.
+
+The default values of the B<ip> hash are 
+(4,5,16,0,0,0x4000,64,6,0,0,0) for the B<tcp> or 
+(4,5,16,0,0,0x4000,64,17,0,0,0) for the B<udp> or 
+(4,5,16,0,0,0x4000,64,1,0,0,0) for the B<icmp> or 
+(4,5,16,0,0,0x4000,64,0,0,0,0) for the B<generic>.
+
+The B<C<PROTOKEY>> is one of (B<source> B<dest> B<seq> B<ack_seq> B<doff> 
 B<res1> B<res2> B<urg> B<ack> B<psh> B<rst> B<syn> B<fin> B<window> B<check>
-B<urg_ptr> B<data>) for tcp and one of (B<type> B<code> B<check>
-B<gateway> B<id> B<sequence> B<unused> B<mtu> B<data>) for icmp and
-one of (B<source> B<dest> B<len> B<check> B<data>) for udp and just B<data> 
-for generic.
-You must specify only B<gateway> - (int) or (B<id> and B<sequence>)
+B<urg_ptr> B<data>) for the tcp or 
+
+one of (B<type> B<code> B<check> B<gateway> B<id> B<sequence> B<unused> B<mtu> B<data>)
+for the icmp or 
+
+one of (B<source> B<dest> B<len> B<check> B<data>) for the udp or just 
+
+B<data> for the generic.
+
+You have to specify just B<gateway> - (int) or (B<id> and B<sequence>)
 - (short and short) or (B<mtu> and B<unused>) - (short and short)
-for icmp because in real icmp packet it's  C union.
-Default values is (0,0,0,0,5,0,0,0,0,0,0,0,0,0xffff,0,0,'') for tcp and
-(0,0,0,0,0,0,0,0,'') for icmp and (0,0,0,0,'') for udp and ('') for generic.
-Valid values for B<urg> B<ack> B<psh> B<rst> B<syn> B<fin> is 0 or 1.
-Value of B<data> is a string. Length of result packet will be calculated
-if you not specify non-zero value for B<tot_len>. 
+for the icmp because in the real icmp packet it's the C union.
+
+The default values are (0,0,0,0,5,0,0,0,0,0,0,0,0,0xffff,0,0,'') for the tcp and
+                  (0,0,0,0,0,0,0,0,'') for the icmp and 
+                  (0,0,0,0,'') for the udp and 
+                  ('') for the generic.
+
+The valid values for B<urg> B<ack> B<psh> B<rst> B<syn> B<fin> are 0 or 1.
+The value of B<data> is a string. Length of the result packet will be calculated
+if you do not specify non-zero value for B<tot_len>. 
 
 =head1 METHODS
 
@@ -602,126 +674,131 @@ if you not specify non-zero value for B<tot_len>.
 
 =item B<proto>
 
-return name of subclass current object e.g. B<tcp>.
+returns the name of the subclass current object e.g. B<tcp>.
 No input parameters.
 
 =item B<packet> 
 
-return scalar which contain packed ip packet of current object.
+returns a scalar which contain the packed ip packet of the current object.
 No input parameters.
 
 =item B<set> 
 
-is a method for setting parameters current object. Given parameters
-must look like parameters for constructor.
+is a method for set the parameters to the current object. The given parameters
+must look like the parameters for the constructor.
 
 =item B<bset($packet,$eth)>
 
-is a method for setting parameters current object.
-B<$packet> is a scalar which contain binary structure (ip or eth packet).
-This scalar must match with subclass current object.
-If B<$eth> given and have non-zero value then assumed that packet is a
-ethernet packet,otherwise ip packet. 
+is a method for set the parameters for the current object.
+B<$packet> is a scalar which contain binary structure (an ip or an eth packet).
+This scalar must match with the subclass of the current object.
+If B<$eth> is given and it have a non-zero value then assumed that packet is a
+ethernet packet,otherwise it is a ip packet. 
 
 =item B<get> 
 
-is a method for getting parameters from current object. This method return
-array which filled with asked parameters in order as it ordered in
-packet.
-Input parameter is a hash reference. In this hash may be three keys.
-They is a B<ip> and one of B<ARGPROTO>s. Value must be a array reference. This
+is a method for get the parameters from the current object. This method returns
+the array which will be filled with an asked parameters in order as they have ordered in
+packet if you'd call it with an array context.
+If this method is called with a scalar context then it returns a hash reference.
+In that hash will stored an asked parameters as values,the keys are their names.
+ 
+The input parameter is a hash reference. In this hash can be three keys.
+They are a B<ip> and an one of the B<ARGPROTO>s. The value must be an array reference. This
 array contain asked parameters.
-E.g. you want know current value of tos from iphdr and
-flags which contain tcphdr.
+E.g. you want to know current value of the tos from the iphdr and
+the flags of the tcphdr.
 Here is a code :
 
   ($tos,$urg,$ack,$psh,$rst,$syn,$fin) = $packet->get({
             ip => [qw(tos)],
 	    tcp => [qw(psh syn urg ack rst fin)]
 	    });
-Members in array can be given in any order.
 
-For getting ethernet parameters use key B<eth> and values of array
-(B<dest>,B<source>,B<proto>). Values of B<dest> and B<source>
-look like output of ifconfig(8) e.g. 00:00:E8:43:0B:2A. 
+The members in the array can be given in any order.
+
+For get the ethernet parameters you have to use the key B<eth> and the 
+values of the array (B<dest>,B<source>,B<proto>). The values of the B<dest> and 
+the B<source> will look like the output of the ifconfig(8) e.g. 00:00:E8:43:0B:2A. 
 
 =item B<send($delay,$times)>
 
-is a method which used for send raw ip packet.
-Input parameters is a delay seconds and a times for repeat sending.
-If you not specifies parameters for B<send>,then packet will be send once
+is a method which has used for send raw ip packet.
+The input parameters are the delay seconds and the times for repeating send.
+If you do not specify parameters for the B<send>,then packet will be sent once
 without delay. 
-If you specifies for times negative value then packet will be send forever.
-E.g. you want send packet 10 times with delay equal 1 second.
+If you do specify for the times a negative value then packet will be sent forever.
+E.g. you want to send the packet for ten times with delay equal to one second.
 Here is a code :
 
 $packet->send(1,10);
 
 =item B<pcapinit($device,$filter,$psize,$timeout)>
 
-is a method for some pcap init. Input parameters is a device,string with
-program for filter,packet size,timeout.
-This method call pcap function open_live,then compile filter string,
-set filter and return B<pcap_t *>.            	         
+is a method for a some pcap init. The input parameters are a device,a string with
+a program for a filter,a packet size,a timeout.
+This method will call the function open_live,then compile the filter string by compile(),
+set the filter and returns the pointer (B<pcap_t *>).            	         
 
 =item B<ethnew>(B<$device>,B<dest> => B<ARGOFDEST>,B<source> => B<ARGOFSOURCE>)
 
-is a method for init ethernet subclass for current object, B<$device> is a
-required parameter,B<dest> and B<source> is optional, B<$device> is ethernet
-device e.g. B<eth0>, B<ARGOFDEST> and B<ARGOFSOURCE> is a ethernet addresses
-in the ethernet header for current object.
+is a method for init the ethernet subclass in the current object, B<$device> is a
+required parameter,B<dest> and B<source> are an optional, B<$device> is an ethernet
+device e.g. B<eth0>, an B<ARGOFDEST> and an B<ARGOFSOURCE> are a the ethernet addresses
+in the ethernet header of the current object.
 
-B<ARGOFDEST> and B<ARGOFSOURCE> may be given as string which contain 
-just 6 bytes real ethernet adress or as it look in ifconfig(8) 
-output e.g. 00:00:E8:43:0B:2A or just ip adress or hostname of target, 
-then mac adress will be discovered automatically.
+The B<ARGOFDEST> and the B<ARGOFSOURCE> can be given as a string which contain 
+just 6 bytes of the real ethernet address or like the output of the ifconfig(8) 
+e.g. 00:00:E8:43:0B:2A or just an ip address or a hostname of a target, 
+then a mac address will be discovered automatically.
 
-Ethernet frame will be send with given adresses.
-By default B<source> and B<dest> will be filled with hardware address of   
-B<$device>.
+The ethernet frame will be sent with given addresses.
+By default the B<source> and the B<dest> will be filled with a hardware address of   
+the B<$device>.
 
-B<NOTE:> For using methods related for ethernet you must before initializing
+B<NOTE:> For use methods which are related to the ethernet you have to before initialize
 ethernet subclass by B<ethnew>. 
 
 =item B<ethset>
 
-is a method for setting ethernet parameters for current object.
-Given parameters must look like parameters for B<ethnew> without
-B<$device>.
+is a method for set an ethernet parameters in the current object.
+The given parameters must look like parameters for the B<ethnew> without
+a B<$device>.
 
 =item B<ethsend>
 
-is a method for sending ethernet frame.
-Given parameters must look like parameters for B<send>.
+is a method for send the ethernet frame.
+The given parameters must look like a parameters for the B<send>.
 
 =item B<optset>(OPTPROTO => { type => [...],data => [...] },...)
 
-is a method for setting IP and TCP options.
-Parameters for optset must be given as key-value pairs.  
-B<OPTPROTO>,s is the prototypes of options(B<ip>,B<tcp>),values is the hash
-references.The keys in this hashes is B<type> and B<data>.
-Value of B<type> is the array reference.
-This array must be filled with integers.Refer to RFC for valid types.Value of 
-B<data> also is the array reference. This array must be filled 
-with strings which must contain all bytes from option except bytes 
-with type and length of option.Of course indexes in this arrays must be 
-equal for one option.
+is a method for set an IP and a TCP options.
+The parameters for the optset must be given as a key-value pairs.  
+The B<OPTPROTO>,s are the prototypes of the options(B<ip>,B<tcp>),values are the hashes
+references.The keys in this hashes are B<type> and B<data>.
+The value of the B<type> is an array reference.
+This array must be filled with an integers.Refer to a RFC for a valid types.The value of 
+the B<data> also is an array reference. This array must be filled 
+with strings which must contain all bytes from a option except bytes 
+with type and length of an option.Of course indexes in those arrays must be 
+equal for the one option.If type is equal to 0 or 1 then there is no bytes
+with a length and a data,but you have to specify zero data for compability.
 
 =item B<optget>(OPTPROTO => { type => [...] },...)  
 
-is a method for getting IP and TCP options.
-Parameters for optset must be given as key-value pairs.
-B<OPTPROTO> is the prototype of options(B<ip>,B<tcp>),values is the hash
-reference.The key is B<type>.Value of B<type> is the array reference.
-Return value is the array which will be filled with asked type,length,data
-for each type of option in order as you asked.If you not specify type then
-all types,length,datas of options will be returned.
-E.g. you want know all IP options from current object.
+is a method for get an IP and a TCP options.
+The parameters for the optget must be given as key-value pairs.
+The B<OPTPROTO> is the prototype of the options(B<ip>,B<tcp>),the values are 
+the hashes references.The key is the B<type>.The value of the B<type> is an array reference.
+The return value is an array which will be filled with asked types,lengths,datas
+of the each type of the option in order as you have asked.If you do not specify type then
+all types,lengths,datas of an options will be returned.
+E.g. you want to know all the IP options from the current object.
 Here is a code:
 
 @opts = $a->optget(ip => {});
 
-E.g. you want know just IP options with type equal to 131 and 137.
+E.g. you want to know just the IP options with the type which equal to 131 and 137.
 Here is a code:
 
 ($t131,$l131,$d131,$t137,$l137,$d137) = $a->optget(
@@ -731,16 +808,16 @@ Here is a code:
 
 =item B<optunset>
 
-is a method for unsetting subclass of IP or TCP options from current
-object.It can be used if you  won't use options in current object.
-This method must be used only after B<optset>.
-Parameters for this method is the B<OPTPROTO>'s. 
-E.g. you want unset IP options.
+is a method for unset a subclass of the IP or the TCP options from a current
+object.It can be used if you  won't use options in the current object later.
+This method must be used only after the B<optset>.
+The parameters for this method are the B<OPTPROTO>'s. 
+E.g. you want to unset an IP options.
 Here is a code:
 
 $a->optunset('ip');
 
-E.g. you want unset TCP and IP options.
+E.g. you want to unset a TCP and an IP options.
 Here is a code:
 
 $a->optunset('ip','tcp');
