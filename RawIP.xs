@@ -440,7 +440,6 @@ static SV * ip_opts_creat(ref)
        sv_catpvn(ip_opts,SvPV(*av_fetch(opts,i+2,0),l),
                          SvCUR(*av_fetch(opts,i+2,0)));
        break;
-       default:
        }
     }
        c = 0;
@@ -539,7 +538,6 @@ static SV * tcp_opts_creat(ref)
        sv_catpvn(ip_opts,SvPV(*av_fetch(opts,i+2,0),l),
                          SvCUR(*av_fetch(opts,i+2,0)));
        break;
-       default:
        }
     }
        c = 0;
