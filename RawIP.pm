@@ -85,9 +85,10 @@ sub AUTOLOAD {
 bootstrap Net::RawIP $VERSION;
 
 # Warn if called from non-root accounts
-warn "Must have euid = 0 for use Net::RawIP" if $>;
+carp "Must have EUID == 0 to use Net::RawIP" if $>;
 
-# For prevent spurious warnings
+# To prevent spurious warnings.  Actually, that doesn't work all too well;
+# callers might have to set $^W to 0 themselves.
 local $^W = 0;
 
 # The constructor
@@ -294,7 +295,7 @@ sub mac {
         }
         else {
 	my $ipn = sprintf("%u.%u.%u.%u",unpack("C4",pack("N1",$ip)));
-	die "Can't discovery mac address for $ipn";
+	croak "Can't discover MAC address for $ipn";
 	}
     }
 }
@@ -556,8 +557,8 @@ sub pcapinit {
 my($self,$device,$filter,$size,$tout) = @_;
 my $promisc = 0x100;
 my ($erbuf,$pcap,$program);
-die "$erbuf" unless ($pcap = open_live($device,$size,$promisc,$tout,$erbuf));
-die "compile(): check string with filter" if (compile($pcap,$program,$filter,0,0) < 0);
+croak "$erbuf" unless ($pcap = open_live($device,$size,$promisc,$tout,$erbuf));
+croak "compile(): check string with filter" if (compile($pcap,$program,$filter,0,0) < 0);
 setfilter($pcap,$program);
 return $pcap
 } 
@@ -565,7 +566,7 @@ return $pcap
 sub pcapinit_offline {
 my($self,$fname) = @_;
 my ($erbuf,$pcap);
-die "$erbuf" unless ($pcap = open_offline($fname,$erbuf));
+croak $erbuf unless ($pcap = open_offline($fname,$erbuf));
 return $pcap;
 }
 
@@ -575,7 +576,7 @@ my $ip = ($_[0] =~ /^-?\d+$/) ? $_[0] : host_to_ip($_[0]);
 my $ipn = unpack("I",pack("N",$ip));
 if(($rdev = ip_rt_dev($ipn)) eq 'proc'){
   my($dest,$mask);
-  open(ROUTE,"/proc/net/route") || die "Can't open /proc/net/route";
+  open(ROUTE,"/proc/net/route") || croak "Can't open /proc/net/route: $!";
   while(<ROUTE>){
                  next if /Destination/;
                  ($rdev,$dest,$mask) = (split(/\s+/))[0,1,7];
@@ -584,7 +585,7 @@ if(($rdev = ip_rt_dev($ipn)) eq 'proc'){
   CORE::close(ROUTE);
   $rdev = 'lo' unless ($ip & 0xFF000000) ^ 0x7f000000; # For Linux 2.2.x 
 }
-  die "rdev(): Destination unreachable" unless $rdev;
+  croak "rdev(): Destination unreachable" unless $rdev;
 # The aliasing support
   $rdev =~ s/([^:]+)(:.+)?/$1/;
 return $rdev;    

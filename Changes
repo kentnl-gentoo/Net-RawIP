@@ -1,5 +1,19 @@
 Revision history for Perl extension Net::RawIP.
 
+
+0.09c Mon Apr  3 16:12:56 2000
+       -  small modification in Makefile.PL to get
+          the module included in the BCL 6.2 
+
+0.09b Mon Mar 27 17:15:01 2000
+       -  fixed some memory leaks 
+
+0.09a Sat Mar 25 22:31:21 2000
+       -  fixes in the tcp options parse code
+          Thanks to <Azrael@wwdg.com>
+       -  applied patch from Stanislav Shalunov <shalunov@att.com>
+          (die() has changed to croak())
+	  
 0.09  Wed Oct 20 11:00:00 1999
        -  fixed bug in lookupnet 
           Applied patch from Brian Craft <bcboy@cisco.com>

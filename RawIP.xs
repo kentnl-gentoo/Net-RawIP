@@ -330,7 +330,7 @@ static SV * retref (ref)
 static SV * handler (file)
     u_char * file;
     {
-    SV * handle; 
+    SV * handle;
     GV * gv;
     handle = sv_newmortal();
     gv = newGVgen("Net::RawIP");
@@ -338,6 +338,10 @@ static SV * handler (file)
     sv_setsv(handle, sv_bless(newRV_noinc((SV*)gv), gv_stashpv("Net::RawIP",1)));
     return handle;
     }
+
+SV * first;
+SV * second;
+SV * third;
 
 static  void
     call_printer (file,pkt,user)
@@ -347,14 +351,17 @@ static  void
     {
     dSP ;
     PUSHMARK(sp) ;
-    XPUSHs(sv_2mortal(newSVsv((*ptr)(file))));
-    XPUSHs(sv_2mortal(newSVpv((u_char *)pkt,sizeof(struct pcap_pkthdr))));
-    XPUSHs(sv_2mortal(newSVpv(user,pkt->caplen)));
+    sv_setsv(first,(*ptr)(file));
+    sv_setpvn(second,(u_char *)pkt,sizeof(struct pcap_pkthdr));
+    sv_setpvn(third,user,pkt->caplen);
+    XPUSHs(first);
+    XPUSHs(second);
+    XPUSHs(third);
     PUTBACK ;
     perl_call_sv((SV*)printer,G_VOID);
     }
 
-SV * ip_opts_parse(pkt)
+static SV * ip_opts_parse(pkt)
      SV * pkt;
 {
      int size,byte,i;
@@ -374,7 +381,6 @@ SV * ip_opts_parse(pkt)
        ptr++;
        byte++;
        break;
-       case 2:
        case 7:
        case 68:
        case 130:
@@ -401,7 +407,102 @@ SV * ip_opts_parse(pkt)
 return newRV_noinc((SV*)RETVAL);
 } 																					  
 
-SV * ip_opts_creat(ref)
+static SV * ip_opts_creat(ref)
+     SV * ref;
+{
+     int len,i;
+     AV * opts;
+     SV * ip_opts;
+     char c;
+     STRLEN l;
+     if(SvTYPE(SvRV(ref)) == SVt_PVAV) opts = (AV *)SvRV(ref);
+     else
+     croak("Not array reference\n");
+     ip_opts = newSVpv(SvPV((SV*)&PL_sv_undef,l),0);
+     len = av_len(opts);
+     for(i=0;i<=(len-2);i=i+3){
+     switch (SvIV(*av_fetch(opts,i,0))){
+       case 0:
+       case 1:
+       c = (char)SvIV(*av_fetch(opts,i,0));
+       sv_catpvn(ip_opts,&c,1);
+       break;
+       case 7:
+       case 68:
+       case 130:
+       case 131:
+       case 136:
+       case 137:
+       c = (char)SvIV(*av_fetch(opts,i,0));
+       sv_catpvn(ip_opts,&c,1);
+       c = (char)SvIV(*av_fetch(opts,i+1,0));
+       sv_catpvn(ip_opts,&c,1);
+       sv_catpvn(ip_opts,SvPV(*av_fetch(opts,i+2,0),l),
+                         SvCUR(*av_fetch(opts,i+2,0)));
+       break;
+       default:
+       }
+    }
+       c = 0;
+       for(i=0;i<SvCUR(ip_opts)%4;i++){
+       sv_catpvn(ip_opts,&c,1);
+       }
+       if(SvCUR(ip_opts) > 40) SvCUR_set(ip_opts,40);  
+return ip_opts;
+} 																					  
+
+
+static SV * tcp_opts_parse(pkt)
+     SV * pkt;
+{
+     int size,byte,i;
+     u_char * ptr;
+     AV * RETVAL; 
+     byte = 0;
+     size = SvCUR(pkt);
+     ptr = SvPV(pkt,size);
+     RETVAL = newAV();
+     for(i=0;byte<size;i=i+3){
+     switch (*ptr){
+       case 0:
+       case 1:
+       av_store(RETVAL,i,newSViv(*ptr));
+       av_store(RETVAL,i+1,newSViv(1));
+       av_store(RETVAL,i+2,newSViv(0));
+       ptr++;
+       byte++;
+       break;
+       case 2:
+       case 3:
+       case 4:
+       case 5:
+       case 6:
+       case 7:
+       case 8:
+       case 11:
+       case 12:
+       case 13:
+       av_store(RETVAL,i,newSViv(*ptr));
+       av_store(RETVAL,i+1,newSViv(*(ptr+1)));
+       av_store(RETVAL,i+2,newSVpv(ptr+2,*(ptr+1)-2));
+         if(!*(ptr + 1)) {
+         ptr++;
+         byte++;
+         }
+         else {
+       byte = byte + *(ptr + 1);
+       ptr = ptr + *(ptr + 1);
+         }
+       break;
+       default:
+       ptr++;
+       byte++;
+       }
+    }  
+return newRV_noinc((SV*)RETVAL);
+} 																					  
+
+static SV * tcp_opts_creat(ref)
      SV * ref;
 {
      int len,i;
@@ -422,12 +523,15 @@ SV * ip_opts_creat(ref)
        sv_catpvn(ip_opts,&c,1);
        break;
        case 2:
+       case 3:
+       case 4:
+       case 5:
+       case 6:
        case 7:
-       case 68:
-       case 130:
-       case 131:
-       case 136:
-       case 137:
+       case 8:
+       case 11:
+       case 12:
+       case 13:
        c = (char)SvIV(*av_fetch(opts,i,0));
        sv_catpvn(ip_opts,&c,1);
        c = (char)SvIV(*av_fetch(opts,i+1,0));
@@ -682,7 +786,7 @@ CODE:
    av_store(RETVAL,28,newSViv(0));
    }
    av_store(RETVAL,29,
-    ip_opts_parse(sv_2mortal(newSVpv((u_char*)pktr+40,doff*4-20))));
+    tcp_opts_parse(sv_2mortal(newSVpv((u_char*)pktr+40,doff*4-20))));
            (u_char*)pktr = (u_char*)pktr + (doff*4 - 20);
   } 
   av_store(RETVAL,27,newSVpv(((u_char*)&pktr->th.urg_ptr+2),
@@ -1056,7 +1160,7 @@ CODE:
      if(av_fetch(pkt,29,0)){
              if(SvROK(*av_fetch(pkt,29,0))){
      opt++;
-     tcp_opts = ip_opts_creat(*av_fetch(pkt,29,0));
+     tcp_opts = tcp_opts_creat(*av_fetch(pkt,29,0));
      if(ipo){
      ptr = SvPV(RETVAL,PL_na);
      tptr = (u_char*)safemalloc(SvCUR(RETVAL) + SvCUR(tcp_opts) -
@@ -1188,6 +1292,9 @@ CODE:
     else {
     ptr = &retref;
     }
+    first = newSViv(0);
+    second = newSViv(0);
+    third = newSViv(0);
     RETVAL = pcap_dispatch(p,cnt,(pcap_handler)&call_printer,(u_char*)user);
 OUTPUT:
 RETVAL
@@ -1207,6 +1314,9 @@ CODE:
     else {
     ptr = &retref;
     }
+    first = newSViv(0);
+    second = newSViv(0);
+    third = newSViv(0);
     RETVAL = pcap_loop(p,cnt,(pcap_handler)&call_printer,(u_char*)user);
 OUTPUT:
 RETVAL
