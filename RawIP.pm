@@ -63,7 +63,7 @@ timem linkoffset ifaddrlist rdev)
                             ]
 	       );	  	    
 
-$VERSION = '0.09';
+$VERSION = '0.1';
 
 sub AUTOLOAD {
     my $constname;

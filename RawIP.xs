@@ -49,7 +49,7 @@ struct ether_header
   u_int16_t ether_type;		        /* packet type ID field	*/
 };
 
-#endif _ETH_
+#endif
 
 struct iphdr
   {
@@ -334,7 +334,7 @@ static SV * handler (file)
     GV * gv;
     handle = sv_newmortal();
     gv = newGVgen("Net::RawIP");
-    do_open(gv, "+<&", 3, FALSE, 0, 0, (FILE*)file);
+    do_open(gv, "+<&", 3, FALSE, 0, 0, PerlIO_importFILE((FILE*)file, NULL));
     sv_setsv(handle, sv_bless(newRV_noinc((SV*)gv), gv_stashpv("Net::RawIP",1)));
     return handle;
     }
@@ -1273,7 +1273,7 @@ dump(ptr,pkt,user)
   SV * pkt
   SV * user
 CODE:
-pcap_dump((u_char*)IoOFP(sv_2io(ptr)),
+pcap_dump((u_char*)PerlIO_findFILE(IoOFP(sv_2io(ptr))),
           (struct pcap_pkthdr*)(SvPV(pkt,PL_na)),
           (u_char*)(SvPV(user,PL_na)));      
 

@@ -1,5 +1,9 @@
 Revision history for Perl extension Net::RawIP.
 
+0.1   Sat Feb  1 22:23:14 PST 2003
+       -  applied patch from Willem Itsme <itsme@xs4all.nl> to get 
+          Perl 5.8 satisfied  	
+
 0.09d Tue Nov 21 11:47:43 2000
        -  applied patch from Igal Koshevoy <igal@eBizQuality.com>
           exit() calls were changed to croak()
