@@ -6,7 +6,7 @@ use Net::RawIP;
 require 'getopts.pl';
 
 Getopts('i:d:n:');
-die "Usage $0 -i <ftp server> -d <eth device> -n <number of packets for receive>"
+die "Usage $0 -i <ftp server> -d <eth device> -n <number packet for receive>"
 unless ($opt_d && $opt_d && $opt_n);
 
 print "Now please login to your ftp server\n";

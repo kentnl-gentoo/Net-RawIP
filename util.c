@@ -6,17 +6,41 @@
  * 	Copyright (C) 1998 by kra
  *
  */
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <signal.h>
-#include <unistd.h>
-#include <string.h>
-#include <netdb.h>
-#include <netinet/ip.h>
 
+#ifdef _SOLARIS_
+#include "solaris.h"
+#else
+#include <sys/cdefs.h>
+#endif
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <stdio.h>
+#include <netdb.h>
+#include <netinet/in.h>
+
+
+struct iphdr
+  {
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+    u_int8_t ihl:4;
+    u_int8_t version:4;
+#elif __BYTE_ORDER == __BIG_ENDIAN
+    u_int8_t	version:4;
+    u_int8_t ihl:4;
+#else
+#error	"Please fix <bytesex.h>"
+#endif
+    u_int8_t tos;
+    u_int16_t tot_len;
+    u_int16_t id;
+    u_int16_t frag_off;
+    u_int8_t ttl;
+    u_int8_t protocol;
+    u_int16_t check;
+    u_int32_t saddr;
+    u_int32_t daddr;
+    /*The options start here. */
+  };
 
 
 
@@ -82,23 +106,11 @@ unsigned short in_cksum(unsigned short *ptr, int nbytes)
 	return(answer);
 }
 
-int sprintf_eth_mac(char *b, unsigned char *mac)
-{
-	return sprintf(b, "%02X:%02X:%02X:%02X:%02X:%02X", 
-		       mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-}
-
-int print_eth_mac(unsigned char *mac)
-{
-	char buf[64];
-	
-	sprintf_eth_mac(buf, mac);
-	return printf("%s", buf);
-}
 
 int rawsock(void)
 {
 	int fd,val=1;
+
     
 	if ((fd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW)) < 0) {
 			perror("\n(rawsock) Socket problems [fatal]");
@@ -109,23 +121,8 @@ int rawsock(void)
         		perror("Cannot set IP_HDRINCL socket option");
 		exit(1);
 	}
-	
 	return fd;
 }	
-
-struct sockaddr_in *
-set_sockaddr (unsigned int  daddr, unsigned short port)
-/* Set up target socket address and return pointer to sockaddr_in structure. */
-{
-  struct sockaddr_in *dest_sockaddr;
-  dest_sockaddr = (struct sockaddr_in *) malloc (sizeof (struct sockaddr_in));
-
-  bzero (dest_sockaddr, sizeof (struct sockaddr_in));
-  dest_sockaddr->sin_family = AF_INET;
-  dest_sockaddr->sin_port = htons (port);
-  dest_sockaddr->sin_addr.s_addr = htonl (daddr);
-  return (dest_sockaddr);
-}
 
 u_long
 host_to_ip (char *host_name)
@@ -147,8 +144,9 @@ host_to_ip (char *host_name)
 }
 
 void
-pkt_send (int fd, struct sockaddr_in * sock,u_char *pkt,size_t size)
+pkt_send (int fd, unsigned char * sock,u_char *pkt,int size)
 {
+
   if (sendto (fd, (const void *)pkt,size, 0, (const struct sockaddr *) sock, sizeof (struct sockaddr)) < 0)
     {
       perror ("sendto()");

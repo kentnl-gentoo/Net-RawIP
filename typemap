@@ -10,6 +10,5 @@ struct pcap_stat *      T_IV
 const u_char *		T_IV
 struct pcap_pkthdr * 	T_IV
 bpf_u_int32	T_IV
-EIPKT *		T_IV
 u_int 		T_IV
 struct sockaddr_in * T_IV

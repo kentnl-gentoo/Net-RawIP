@@ -1,0 +1,66 @@
+Revision history for Perl extension Net::RawIP.
+
+0.04  Mon Jan 25 09:27:50 1999
+       -  port to BSDI and probably to other *BSD 
+          Thanks for help to TTSG <ttsg@ttsg.com>
+       -  fixes for compile with Perl 5.005, thanks to Gurusamy Sarathy
+          <gsar@umich.edu> for his finest Data::Dumper ;)
+
+0.03  Tue Jan 19 16:26:23 1999
+       -  implemented generic subclass for generic ip datagramms
+       -  implemented manipulate IP and TCP options
+       -  added new example scripts
+       -  fix in RawIP.xs from noel@burton-krahn.com
+          for suppress warning messages while compile on Alpha
+
+0.03f Wed Jan  6 16:35:58 1999
+       -  insert BSDFIX() for FreeBSD rawsocket format
+       -  it seems like Net::RawIP is worked on FreeBSD
+          Thanks for help porting to FreeBSD
+	  to Igor Indick <igor@skif.net>
+	  and Nicholas N. Matveev <nickm@ruff.granch.nsk.su>
+
+0.03e Mon Jan  4 16:22:25 1999
+       -  remove memory leaks reported by 
+          ian.vitek@backupcentralen.se
+
+0.03d Thu Dec 31 07:42:57 1998
+       -  reworked set_sockaddr 
+       -  remove #ifdef FreeBSD and usleep(20000);
+
+0.03c Wed Dec 30 09:08:01 1998
+       -  applied patch from Bryan Blackburn <blb@rmi.net>
+          for porting to Solaris
+       -  added some pod fixes from Bryan Blackburn <blb@rmi.net>
+          for pod2html
+
+0.03b Mon Dec 28 13:50:17 1998
+	- fix problems with gcc 2.7.2.1 on FreeBSD
+         
+      Tue Dec 29 16:52:16 1998	  			 	  
+       -  insert usleep(20000); for sendto() on FreeBSD
+
+0.03a Thu Dec 24 10:01:15 1998
+        - minimize files for includes for system compability
+	- Set switch $^W to FALSE for suppress warning messages
+      Thu Dec 24 18:59:42 1998
+        - added some compability with other systems
+
+0.02  Wed Dec 23 17:59:30 1998
+        - some man fixes
+
+0.02b Tue Dec 22 15:32:51 1998
+        - documenting new ethernet related features
+
+
+0.01  Thu Dec 10 19:48:04 1998
+	- original version
+      Wed Dec 16 18:29:25 1998
+        - implemented udp and icmp packets       
+      Mon Dec 21 18:40:11 1998
+        - implemented SOCK_PACKET and manipulating eth headers
+	  including discovering mac adresses
+
+
+
+	         
