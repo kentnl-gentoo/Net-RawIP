@@ -1,0 +1,5 @@
+#!/usr/bin/perl 
+
+use Net::RawIP;
+$a = ifaddrlist;
+map { print "$_ -> $a->{$_}\n" } keys %$a;

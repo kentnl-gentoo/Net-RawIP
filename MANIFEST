@@ -5,12 +5,17 @@ README.DEV
 Makefile.PL
 RawIP.pm
 RawIP.xs
-TODO
 test.pl
 typemap
 util.c
 eth.c
+ifaddrlist.c
+ifaddrlist.h
+ip.h
+rdev.c
 solaris.h
+examples/iflist
+examples/ip_rt_dev
 examples/land
 examples/oshare
 examples/watch
@@ -18,3 +23,4 @@ examples/ping
 examples/macof
 examples/traceroute
 examples/ipopt_traceroute
+RawIP/libpcap.pod

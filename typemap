@@ -12,3 +12,4 @@ struct pcap_pkthdr * 	T_IV
 bpf_u_int32	T_IV
 u_int 		T_IV
 struct sockaddr_in * T_IV
+u_int32_t 		T_IV

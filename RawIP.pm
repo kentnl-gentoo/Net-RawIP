@@ -38,12 +38,14 @@ struct ( 'Net::RawIP::ethhdr' => [map { $_ => '$' } @ethhdr ] );
 package Net::RawIP;
 use Carp;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK $AUTOLOAD);
+use subs qw(timem ifaddrlist);
+
 require Exporter;
 require DynaLoader;
 require AutoLoader;
 @ISA = qw(Exporter DynaLoader);
 
-@EXPORT = qw(timem open_live dump_open dispatch dump loop linkoffset);
+@EXPORT = qw(timem open_live dump_open dispatch dump loop linkoffset ifaddrlist rdev);
 @EXPORT_OK = qw(
 PCAP_ERRBUF_SIZE PCAP_VERSION_MAJOR PCAP_VERSION_MINOR lib_pcap_h
 open_live open_offline dump_open lookupdev lookupnet dispatch
@@ -54,12 +56,12 @@ qw(
 PCAP_ERRBUF_SIZE PCAP_VERSION_MAJOR PCAP_VERSION_MINOR lib_pcap_h
 open_live open_offline dump_open lookupdev lookupnet dispatch
 loop dump compile setfilter next datalink snapshot is_swapped major_version
-minor_version stats file fileno perror geterr strerror close dump_close timem 
-linkoffset)  
+minor_version stats file fileno perror geterr strerror close dump_close
+timem linkoffset ifaddrlist rdev)  
                             ]
 	       );	  	    
 
-$VERSION = '0.05';
+$VERSION = '0.06';
 
 sub AUTOLOAD {
     # This AUTOLOAD is used to 'autoload' constants from the constant()
@@ -195,7 +197,7 @@ map {
   $optproto = $_;
   if($optproto eq 'tcp'){
   $i = 1;
-  $class->{'tcphdr'}->doff(0);
+  $class->{'tcphdr'}->doff(5);
   }
   else 
   {
@@ -211,7 +213,7 @@ sub ethnew {
  my($class,$dev,@arg) = @_;
  my($ip,$mac);
  $class->{'ethhdr'} = new Net::RawIP::ethhdr; 
- $class->{'tap'} = tap($dev,1,$ip,$mac);
+ $class->{'tap'} = tap($dev,$ip,$mac);
  $class->{'ethdev'} = $dev;
  $class->{'ethmac'} = $mac;
  $class->{'ethip'} = $ip; 
@@ -266,9 +268,9 @@ sub mac {
                                    daddr => $ip},
 			    icmp => {}
 			  });
-    $obj->send;
+    $obj->send(1,1);
         if(mac_disc($ip,$mac)){
-         return $mac;
+	  return $mac;
         }
         else {
 	my $ipn = sprintf("%u.%u.%u.%u",unpack("C4",pack("N1",$ip)));
@@ -515,6 +517,33 @@ setfilter($pcap,$program);
 return $pcap
 } 
 
+sub pcapinit_offline {
+my($self,$fname) = @_;
+my ($erbuf,$pcap);
+die "$erbuf" unless ($pcap = open_offline($fname,$erbuf));
+return $pcap;
+}
+
+sub rdev {
+my $rdev;
+my $ip = ($_[0] =~ /^-?\d+$/) ? $_[0] : host_to_ip($_[0]);
+my $ipn = unpack("I",pack("N",$ip));
+if(($rdev = ip_rt_dev($ipn)) eq 'proc'){
+  my($dest,$mask);
+  open(ROUTE,"/proc/net/route") || die "Can't open /proc/net/route";
+  while(<ROUTE>){
+                 next if /Destination/;
+                 ($rdev,$dest,$mask) = (split(/\s+/))[0,1,7];
+                 last unless ($ipn & hex($mask)) ^ hex($dest);
+  }
+  CORE::close(ROUTE);
+  $rdev = 'lo' unless ($ip & 0xFF000000) ^ 0x7f000000; # For Linux 2.2.x 
+}
+  die "rdev(): Destination unreachable" unless $rdev;
+  $rdev =~ s/([^:]+)(:.+)?/$1/;
+return $rdev;    
+}
+
 1;
 __END__
 
@@ -542,7 +571,7 @@ This package provides a class object which can be used for
 creating, manipulating and sending a raw ip packets with
 optional feature for manipulating ethernet headers.
 
-B<NOTE:> Ethernet related methods now imlemented only on Linux
+B<NOTE:> Ethernet related methods now imlemented only on Linux and FreeBSD
 
 =head1 Exported constants
 
@@ -580,10 +609,10 @@ dump_close
 timem
 linkoffset
 
-By default exported functions are the B<loop>,B<dispatch>,B<dump_open>,
-B<dump>,B<open_live>,B<timem>,B<linkoffset>. You have to use the export tag 
+By default exported functions are the B<loop>,B<dispatch>,B<dump_open>,B<dump>,
+B<open_live>,B<timem>,B<linkoffset>,B<ifaddrlist>,B<rdev>. You have to use the export tag 
 B<pcap> for export all of the pcap functions.
-Please read the docs for the libpcap.
+Please read the docs for the libpcap and look at L<Net::RawIP::libpcap(3pm)>.
 The exported functions the B<loop> and the B<dispatch> can run a perl code refs
 as a callbacks for packet analyzing and printing.
 If B<dump_open> opens and returns a valid file descriptor,this descriptor can be 
@@ -598,6 +627,19 @@ The function which called B<linkoffset> returns a number of the bytes
 in the link protocol header e.g. 14 for a Ethernet or 4 for a Point-to-Point
 protocol.This function has one input parameter (pcap_t* which is returned
 by open_live). 
+
+The B<ifaddrlist> function returns a hash reference,in this hash keys are 
+all running network devices,values are ip addresses of those devices 
+in an internet address format.
+
+B<NOTE:> The ifaddrlist function isn't implemented on Solaris.
+
+The B<rdev> function returns a name of the outgoing device for given 
+destination address.
+It has one input parameter (destination address in an internet address
+or a domain name or a host byteorder int formats).
+
+ 
 
 Please look at the examples.
 
@@ -735,10 +777,16 @@ $packet->send(1,10);
 
 =item B<pcapinit($device,$filter,$psize,$timeout)>
 
-is a method for a some pcap init. The input parameters are a device,a string with
+is a method for some a pcap init. The input parameters are a device,a string with
 a program for a filter,a packet size,a timeout.
 This method will call the function open_live,then compile the filter string by compile(),
 set the filter and returns the pointer (B<pcap_t *>).            	         
+
+=item B<pcapinit_offline($fname)>
+
+is a method for an offline pcap init.The input parameter is a name of the file
+which contains raw output of the libpcap dump function.
+Returns the pointer (B<pcap_t *>).  
 
 =item B<ethnew>(B<$device>,B<dest> => B<ARGOFDEST>,B<source> => B<ARGOFSOURCE>)
 
@@ -836,7 +884,7 @@ as Perl itself.
 
 =head1 SEE ALSO
 
-perl(1) ,tcpdump(1),RFC 791-793,RFC 768.
+perl(1),Net::RawIP::libpcap(3pm),tcpdump(1),RFC 791-793,RFC 768.
 
 
 =cut

@@ -29,6 +29,7 @@ extern "C" {
 #include "solaris.h"
 #else
 #include <sys/cdefs.h>
+#include "ifaddrlist.h"
 #endif
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -455,6 +456,28 @@ constant(name,arg)
 	int           arg
 
 
+SV * 
+ip_rt_dev(addr)
+u_int32_t addr
+CODE:
+#ifdef _LINUX_
+ char dev[] = "proc";
+ RETVAL = newSVpv(dev,4);
+#endif
+#ifdef _BPF_
+ char dev[16];
+ int len;
+ memset(dev,0,16);
+ len = ip_rt_dev(addr,dev);
+ RETVAL = newSVpv(dev,len); 
+#endif
+#ifdef _SOLARIS_
+ croak("rdev() is not implemented on Solaris");
+#endif
+OUTPUT:
+RETVAL
+
+
 SV *
 timem ()
 CODE:
@@ -476,18 +499,46 @@ RETVAL
 unsigned int  
 rawsock()
 
+
+HV *
+ifaddrlist()
+CODE:
+#ifndef _SOLARIS_
+   int c,i;
+   char buf[132];
+   struct ifaddrlist *al;
+   RETVAL = newHV();
+   sv_2mortal((SV*)RETVAL);    
+   c = ifaddrlist(&al,buf);
+   for (i=0;i<c;i++){
+   hv_store(RETVAL,al->device,al->len,
+            newSVpvf("%u.%u.%u.%u",
+				   (al->addr & 0xff000000) >> 24,
+	                           (al->addr & 0x00ff0000) >> 16,
+				   (al->addr & 0x0000ff00) >> 8,
+				   (al->addr & 0x000000ff)
+		    ),0);
+	   	        
+   al++;
+   }
+#else
+   croak("ifaddrlist() is not implemented on Solaris");
+#endif
+OUTPUT:
+RETVAL
+
+
 #ifdef _ETH_
 
 int
-tap(device,promisc_mode,ip,mac)
+tap(device,ip,mac)
 char *device
-int promisc_mode
 SV *ip
 SV *mac
 CODE:
 unsigned int i;
 unsigned char m[6];
-RETVAL = tap(device,promisc_mode,&i,m);
+RETVAL = tap(device,&i,m);
 if(RETVAL){
    sv_setiv(ip,i);
    sv_setpvn(mac,m,6);
@@ -511,15 +562,13 @@ OUTPUT:
 mac
 RETVAL
 
-int 
+void 
 send_eth_packet(fd,eth_device,pkt)
 int fd
 char* eth_device
 SV* pkt
 CODE:
- RETVAL = send_eth_packet(fd,eth_device,(u_char*)SvPV(pkt,PL_na),SvCUR(pkt));
-OUTPUT:
-RETVAL
+ send_eth_packet(fd,eth_device,(u_char*)SvPV(pkt,PL_na),SvCUR(pkt));
 
 AV * 
 eth_parse(pkt)
@@ -1069,7 +1118,6 @@ open_offline(fname,ebuf)
 CODE:
      ebuf = (char*)safemalloc(PCAP_ERRBUF_SIZE);
      RETVAL = pcap_open_offline(fname,ebuf);
-     Safefree(ebuf);
 OUTPUT:
 ebuf
 RETVAL
@@ -1089,7 +1137,6 @@ lookupdev(ebuf)
 CODE:
      ebuf = (char*)safemalloc(PCAP_ERRBUF_SIZE);
      RETVAL = pcap_lookupdev(ebuf);
-     Safefree(ebuf);
 OUTPUT:
 ebuf
 RETVAL
@@ -1103,7 +1150,6 @@ lookupnet(device,netp,maskp,ebuf)
 CODE:
      ebuf = (char*)safemalloc(PCAP_ERRBUF_SIZE);
      RETVAL = pcap_lookupnet(device,&netp,&maskp,ebuf);
-     Safefree(ebuf);
 OUTPUT:
 ebuf
 RETVAL

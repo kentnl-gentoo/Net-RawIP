@@ -2,14 +2,7 @@
 # Has been created by ShaD0w <mci@gw.al.lg.ua>
 # This is free software; you can redistribute it and/or modify it under the
 # same terms as Perl itself.
-
-#############
-# User configurable section
-
-$dev='eth0'; # set your device
-$ip_addr = 'amk.lan'; # set your ip address
-
-#############
+# Look at user configurable section for set defaults
 
 use Net::RawIP qw(:pcap);
 use Socket;
@@ -29,6 +22,22 @@ $timeout = ($opt_w ? $opt_w: 5);
 
 ($name,$ip) = (gethostbyname($dest))[0,4];
 die "$dest: host not found" if $?; 
+
+#############
+# User configurable section
+
+# If rdev and ifaddrlist functions are not implemented
+
+# $dev='eth0'; # set your device
+# $ip_addr = 'amk.lan'; # set your ip address
+
+# The rdev and ifaddrlist functions are implemented (auto)
+
+$dev = rdev($dest);
+$ip_addr = ${ifaddrlist()}{$dev};
+
+#############
+
 print "traceroute to $name (";
 printf ("%u.%u.%u.%u",unpack("C4",$ip));
 print ") , $max_ttl hops max, 40 byte packets\n";

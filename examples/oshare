@@ -2,7 +2,7 @@
 
 # This script will not work on *BSD because it do generate an incomplete ip
 # packet.
-# You have to use Linux which don't think that him is more clever than a
+# You have to use Linux which don't think that he is more clever than a
 # programmer   
 
 require 'getopts.pl';

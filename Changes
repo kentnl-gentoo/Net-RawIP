@@ -1,5 +1,46 @@
 Revision history for Perl extension Net::RawIP.
 
+0.06  Mon Feb 22 18:44:18 1999
+       -  has been added the man page for the interface to libpcap 
+
+0.05f Mon Feb 22 09:52:20 1999
+       -  rdev has been modified for handle route to localhost on 
+          a systems with a bigendian byteorder 
+
+0.05e Fri Feb 19 11:07:04 1999
+       -  an ethernet related methods are implemented on OpenBSD
+          thanks to Stanislav Grozev <tacho@orbitel.bg> 
+       -  modified rdev for handle default on ppp devices with remote address
+          non-compatible with netmask.Thanks to TTSG <ttsg@ttsg.com>
+       -  change raw format for OpenBSD to RFC format.
+          Thanks to Stanislav Grozev <tacho@orbitel.bg>
+	  
+0.05d Thu Feb 18 14:34:38 1999
+       -  rdev function has been implemented on FreeBSD
+       -  an ethernet related methods are implemented on BSDI
+          thanks to TTSG <ttsg@ttsg.com>
+       -  ifaddrlist function returns and loopback now
+       -  added sleep for better discovering mac addresses
+       -  added NAVE_SOCKADDR_SA_LEN for BSDI
+       -  adapted rdev for 2.2.x Linux and for point-to-point devices
+          on BSDish systems
+            
+0.05c Wed Feb 10 18:37:25 1999
+       -  has been implemented the function rdev(addr) 
+          For now it work on Linux only
+	   
+0.05b Mon Feb  8 17:51:29 1999
+       -  a ethernet related methods are implemented on FreeBSD    
+       -  added method pcapinit_offline from sen_ml@eccosys.com
+               
+0.05a Thu Feb  4 19:26:46 1999
+       -  has been implemented the ifaddrlist function
+          this code was imported with small modification from
+	  the Firewalk portscanner 
+	  FIREWALK  (c) 1998, Mike D. Schiffman <mds@es2.net>
+    	                      Dave H. Goldsmith <dhg@es2.net>
+          Not work on Solaris.					          
+
 0.05  Wed Feb  3 16:20:17 1999
        -  has been added README.DEV - readme for the developers.       
 
