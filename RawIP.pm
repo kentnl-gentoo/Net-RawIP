@@ -63,7 +63,7 @@ timem linkoffset ifaddrlist rdev)
                             ]
 	       );	  	    
 
-$VERSION = '0.07';
+$VERSION = '0.09';
 
 sub AUTOLOAD {
     my $constname;
@@ -309,7 +309,7 @@ while($times){
 # with packed ethernet packet and the flag (0 - non-ip contents,1 - otherwise)  
 send_eth_packet($self->{'tap'},$self->{'ethdev'},
            $self->{'ethpack'}.$self->{'pack'},1);
-sleep $delay;
+select(undef,undef,undef,$delay) if $delay;
 $times--
 }
 } 
@@ -323,7 +323,7 @@ $times = 1;
 while($times){
 send_eth_packet($self->{'tap'},$self->{'ethdev'},
            substr($self->{'ethpack'},0,12).$frame,0);
-sleep $delay;
+select(undef,undef,undef,$delay) if $delay;
 $times--
 }
 } 
@@ -547,7 +547,7 @@ $self->{'sock'} = set_sockaddr($self->{'iphdr'}->daddr,
 }
 while($times){
     pkt_send ($self->{raw},$self->{'sock'},$self->{'pack'});
-sleep $delay;
+select(undef,undef,undef,$delay) if $delay;
 $times--
 }
 } 
@@ -824,6 +824,8 @@ E.g. you want to send the packet for ten times with delay equal to one second.
 Here is a code :
 
 $packet->send(1,10);
+The delay could be specified not only as integer but 
+and as 0.25 for sleep to 250 ms or 3.5 to sleep for 3 seconds and 500 ms.
 
 =item B<pcapinit($device,$filter,$psize,$timeout)>
 

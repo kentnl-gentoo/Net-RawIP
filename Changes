@@ -1,5 +1,14 @@
 Revision history for Perl extension Net::RawIP.
 
+0.09  Wed Oct 20 11:00:00 1999
+       -  fixed bug in lookupnet 
+          Applied patch from Brian Craft <bcboy@cisco.com>
+
+0.08  Wed Oct 13 10:36:41 1999
+       -  "sleep" was changed to "select" for allowing 
+          to have non-integer delay times in seconds
+	  Thanks to Neal E. Young <ney@cs.dartmouth.edu> 
+
 0.07  Thu Jun 17 13:25:10 1999 
        -  some comments 
        -  added new examle scripts

@@ -1158,6 +1158,8 @@ CODE:
      ebuf = (char*)safemalloc(PCAP_ERRBUF_SIZE);
      RETVAL = pcap_lookupnet(device,&netp,&maskp,ebuf);
 OUTPUT:
+netp
+maskp
 ebuf
 RETVAL
 
