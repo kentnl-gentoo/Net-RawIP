@@ -117,6 +117,7 @@ host_to_ip (char *host_name)
 {
   struct hostent *target;
   u_long *resolved_ip;
+  u_long host_resolved_ip;
   resolved_ip = (u_long *) malloc (sizeof (u_long));
 
   if ((target = gethostbyname (host_name)) == NULL)
@@ -126,7 +127,9 @@ host_to_ip (char *host_name)
   else
     {
       bcopy (target->h_addr, resolved_ip, sizeof (struct in_addr));
-      return ntohl ((u_long) * resolved_ip);
+      host_resolved_ip = ntohl ((u_long) * resolved_ip);
+      free(resolved_ip);
+      return host_resolved_ip;
     }
 }
 

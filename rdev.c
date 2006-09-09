@@ -176,6 +176,7 @@ ip_rt_dev(u_int32_t addr,u_char *name)
                                 }
     }
    }
+   free(buf);
   return  dev_name(devip,name);
 }
 

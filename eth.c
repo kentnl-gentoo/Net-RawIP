@@ -217,6 +217,7 @@ return 1;
 				continue;
 			found = 1;
 		}
+	free(buf);
 	if(!found){
 	return 0;
 	} else {

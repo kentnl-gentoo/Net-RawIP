@@ -1,5 +1,10 @@
-#!/usr/local/bin/perl 
+#!/usr/bin/perl 
+use strict;
+use warnings;
+
 
 use Net::RawIP;
-$a = ifaddrlist;
-map { print "$_ -> $a->{$_}\n" } keys %$a;
+my $list = ifaddrlist;
+foreach (keys %$list) {
+    print "$_ -> $list->{$_}\n";
+}

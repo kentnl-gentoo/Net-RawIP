@@ -1,53 +1,69 @@
 #!/usr/bin/perl
+use strict;
+use warnings;
 
 # This script use IP option called "record route" for emulate traceroute.
 # Unfortunately max size of ip options is only 40 bytes and we can see
 # just 9 hops, other hops will be ignored ;(
 
 use Net::RawIP;
-require 'getopts.pl';
+use Getopt::Long qw(GetOptions);
 
-Getopts('i:s:d:');
-die "Usage $0 -i <interface> -d <dest host> -s <your host>"
-unless ($opt_d && $opt_d && $opt_s);
+my %opt;
+GetOptions(\%opt, 'interface=s', 'source=s', 'dest=s');
+die "Usage $0 --interface <interface> --dest <dest host> --source <your host>"
+    unless($opt{dest} && $opt{interface} && $opt{source});
 
-$a = new Net::RawIP ({icmp =>{}});
-$a->set({ip => {saddr => $opt_s, 
-                daddr => $opt_d},
-	 icmp => {type => 8, id => $$}
-	 });  
+my $rawip = Net::RawIP->new({icmp =>{}});
 
-$data = "\5".("\0" x 37);
-$a->optset(ip => {type => [(7)],data =>[($data)] });
+$rawip->set({
+            ip => {
+                saddr => $opt{source},
+                daddr => $opt{dest},
+            },
+	        icmp => {
+                type => 8,
+                id => $$,
+            }
+        });  
 
-$device = $opt_i; 
-$filt = "ip proto \\icmp and dst host $opt_s";
-$size = 1500;
-$tout = 30;
-$pcap = $a->pcapinit($device,$filt,$size,$tout);
-$i =0;
+my $data = "\5".("\0" x 37);
 
-if(fork){
-        loop $pcap,1,\&dmp,\@a; 
+$rawip->optset(ip => {
+                type => [(7)],
+                data => [($data)],
+                });
+
+my $filt = "ip proto \\icmp and dst host $opt{source}";
+my $size = 1500;
+my $tout = 30;
+my $pcap = $rawip->pcapinit($opt{interface}, $filt, $size, $tout);
+my $i    = 0;
+
+my @a;
+if (fork) {
+    loop $pcap,1, \&dmp, \@a; 
 }
-else{
-     sleep 1;
-     $a->set({icmp => {sequence => $i,data => timem()}});
-     $a->send(1,1);
+else {
+    sleep 1;
+    $rawip->set({icmp => {sequence => $i,data => timem()}});
+    $rawip->send(1,1);
 }
 
-sub dmp{
-  $a->bset(substr($_[2],14));
-  $opt = ($a->optget(ip => {type => [(7)] } ))[2];
-  $opt = substr($opt,2);
-  @route = unpack("N9",$opt);
-  $j = 0;
-  for $site (@route){
-                     last unless $site;
-                     printf(" -> ") if $j;
-		     printf("\n") if $j == 4;
-                     printf("%u.%u.%u.%u",unpack("C4",pack("N",$site)));
-                     $j++;
-                    }
- printf("\n");
+sub dmp {
+    $rawip->bset(substr($_[2],14));
+
+    my $opt = ($rawip->optget(ip => {type => [(7)] } ))[2];
+    $opt = substr($opt, 2);
+    my @route = unpack("N9", $opt);
+    my $j = 0;
+    for my $site (@route) {
+        last unless $site;
+        printf(" -> ") if $j;
+		printf("\n") if $j == 4;
+        printf("%u.%u.%u.%u", unpack("C4", pack("N", $site)));
+        $j++;
+    }
+    printf("\n");
 }
+

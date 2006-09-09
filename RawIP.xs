@@ -352,8 +352,8 @@ static  void
     dSP ;
     PUSHMARK(sp) ;
     sv_setsv(first,(*ptr)(file));
-    sv_setpvn(second,(u_char *)pkt,sizeof(struct pcap_pkthdr));
-    sv_setpvn(third,user,pkt->caplen);
+    sv_setpvn(second, (char *)pkt, sizeof(struct pcap_pkthdr));
+    sv_setpvn(third, (char *)user, pkt->caplen);
     XPUSHs(first);
     XPUSHs(second);
     XPUSHs(third);
@@ -389,7 +389,7 @@ static SV * ip_opts_parse(pkt)
        case 137:
        av_store(RETVAL,i,newSViv(*ptr));
        av_store(RETVAL,i+1,newSViv(*(ptr+1)));
-       av_store(RETVAL,i+2,newSVpv(ptr+2,*(ptr+1)-2));
+       av_store(RETVAL,i+2,newSVpv((char*)(ptr+2),*(ptr+1)-2));
          if(!*(ptr + 1)) {
          ptr++;
          byte++;
@@ -483,7 +483,7 @@ static SV * tcp_opts_parse(pkt)
        case 13:
        av_store(RETVAL,i,newSViv(*ptr));
        av_store(RETVAL,i+1,newSViv(*(ptr+1)));
-       av_store(RETVAL,i+2,newSVpv(ptr+2,*(ptr+1)-2));
+       av_store(RETVAL,i+2,newSVpv((char*)(ptr+2),*(ptr+1)-2));
          if(!*(ptr + 1)) {
          ptr++;
          byte++;
@@ -649,7 +649,7 @@ unsigned char m[6];
 RETVAL = tap(device,&i,m);
 if(RETVAL){
    sv_setiv(ip,i);
-   sv_setpvn(mac,m,6);
+   sv_setpvn(mac,(char *)m,6);
 } 
 OUTPUT:
 ip
@@ -664,7 +664,7 @@ CODE:
 unsigned char m[6];
 RETVAL = mac_disc(addr,m);
 if(RETVAL){
-   sv_setpvn(mac,m,6);
+   sv_setpvn(mac,(char *)m,6);
 }
 OUTPUT:
 mac
@@ -714,7 +714,7 @@ CODE:
   dest_sockaddr.sin_family = AF_INET;
   dest_sockaddr.sin_port = htons(port);
   dest_sockaddr.sin_addr.s_addr = htonl(daddr);
-  RETVAL = newSVpv((u_char*)&dest_sockaddr,size);
+  RETVAL = newSVpv((char*)&dest_sockaddr,size);
 OUTPUT:
 RETVAL  
   
@@ -758,8 +758,8 @@ CODE:
   av_store(RETVAL,10,newSViv(ntohl(pktr->ih.daddr)));
   if(ihl > 5){
     av_store(RETVAL,28,
-    ip_opts_parse(sv_2mortal(newSVpv((u_char*)pktr + 20,ihl*4 - 20))));  
-    (u_char*)pktr = (u_char*)pktr + (ihl*4 - 20);  
+    ip_opts_parse(sv_2mortal(newSVpv((char*)pktr + 20,ihl*4 - 20))));  
+    pktr = (ITPKT *)pktr + (ihl*4 - 20);  
     ipo = 1;
   }
   doff = pktr->th.doff;
@@ -784,10 +784,10 @@ CODE:
    av_store(RETVAL,28,newSViv(0));
    }
    av_store(RETVAL,29,
-    tcp_opts_parse(sv_2mortal(newSVpv((u_char*)pktr+40,doff*4-20))));
-           (u_char*)pktr = (u_char*)pktr + (doff*4 - 20);
+    tcp_opts_parse(sv_2mortal(newSVpv((char*)pktr+40,doff*4-20))));
+           pktr = (ITPKT *)pktr + (doff*4 - 20);
   } 
-  av_store(RETVAL,27,newSVpv(((u_char*)&pktr->th.urg_ptr+2),
+  av_store(RETVAL,27,newSVpv(((char*)&pktr->th.urg_ptr+2),
   tot_len - (4*ihl + doff*4))); 
 OUTPUT:
 RETVAL
@@ -817,8 +817,8 @@ CODE:
   av_store(RETVAL,10,newSViv(ntohl(pktr->ih.daddr)));
   if(ihl > 5){
     av_store(RETVAL,20,
-    ip_opts_parse(sv_2mortal(newSVpv((u_char*)pktr + 20,ihl*4 - 20))));  
-    (u_char*)pktr = (u_char*)pktr + (ihl*4 - 20);  
+    ip_opts_parse(sv_2mortal(newSVpv((char*)pktr + 20,ihl*4 - 20))));  
+    pktr = (IIPKT *)pktr + (ihl*4 - 20);  
   }
   av_store(RETVAL,11,newSViv(pktr->ich.type));
   av_store(RETVAL,12,newSViv(pktr->ich.code));
@@ -828,7 +828,7 @@ CODE:
   av_store(RETVAL,16,newSViv(pktr->ich.un.echo.sequence));
   av_store(RETVAL,17,newSViv(pktr->ich.un.frag.unused));
   av_store(RETVAL,18,newSViv(pktr->ich.un.frag.mtu));
-  av_store(RETVAL,19,newSVpv(((u_char*)&pktr->ich.un.frag.mtu+2),
+  av_store(RETVAL,19,newSVpv(((char*)&pktr->ich.un.frag.mtu+2),
   tot_len - (4*ihl + 8)));
 OUTPUT:
 RETVAL
@@ -857,10 +857,10 @@ CODE:
   av_store(RETVAL,10,newSViv(ntohl(pktr->daddr)));
   if(ihl > 5){
     av_store(RETVAL,12,
-    ip_opts_parse(sv_2mortal(newSVpv((u_char*)pktr + 20,ihl*4 - 20))));  
-    (u_char*)pktr = (u_char*)pktr + (ihl*4 - 20);  
+    ip_opts_parse(sv_2mortal(newSVpv((char*)pktr + 20,ihl*4 - 20))));  
+    pktr = pktr + (ihl*4 - 20);  
   }
-  av_store(RETVAL,11,newSVpv(((u_char*)pktr+20),
+  av_store(RETVAL,11,newSVpv(((char*)pktr+20),
   tot_len - 4*ihl));
 OUTPUT:
 RETVAL
@@ -891,14 +891,14 @@ CODE:
   av_store(RETVAL,10,newSViv(ntohl(pktr->ih.daddr)));
   if(ihl > 5){
     av_store(RETVAL,16,
-    ip_opts_parse(sv_2mortal(newSVpv((u_char*)pktr + 20,ihl*4 - 20))));  
-    (u_char*)pktr = (u_char*)pktr + (ihl*4 - 20);  
+    ip_opts_parse(sv_2mortal(newSVpv((char*)pktr + 20,ihl*4 - 20))));  
+    pktr = pktr + (ihl*4 - 20);  
   }
   av_store(RETVAL,11,newSViv(ntohs(pktr->uh.source)));
   av_store(RETVAL,12,newSViv(ntohs(pktr->uh.dest)));
   av_store(RETVAL,13,newSViv(ntohs(pktr->uh.len)));
   av_store(RETVAL,14,newSViv(ntohs(pktr->uh.check)));
-  av_store(RETVAL,15,newSVpv(((u_char*)&pktr->uh.check+2),
+  av_store(RETVAL,15,newSVpv(((char*)&pktr->uh.check+2),
   tot_len - (4*ihl + 8)));
 OUTPUT:
 RETVAL
@@ -950,14 +950,14 @@ CODE:
     memcpy(ptr+20,SvPV(ip_opts,PL_na),SvCUR(ip_opts));
     memcpy(ptr+20+SvCUR(ip_opts),(u_char*)&piu + 20,8);
     ((struct iphdr*)ptr)->check = in_cksum((unsigned short *)ptr,iplen);
-    RETVAL = newSVpv((u_char*)ptr,sizeof(IUPKT)+SvCUR(ip_opts));
+    RETVAL = newSVpv((char*)ptr,sizeof(IUPKT)+SvCUR(ip_opts));
     sv_catsv(RETVAL,*av_fetch(pkt,15,0));
     Safefree(ptr);
     sv_2mortal(ip_opts);
      }
    }
    if(!opt) {
-   RETVAL = newSVpv((u_char*)&piu,sizeof(IUPKT));
+   RETVAL = newSVpv((char*)&piu,sizeof(IUPKT));
    sv_catsv(RETVAL,*av_fetch(pkt,15,0));
    }
    if(!piu.uh.check) {
@@ -965,7 +965,7 @@ CODE:
    ((struct udphdr*)(piur + iplen))->check = 
    ip_in_cksum((struct iphdr *)piur,(unsigned short *)(piur + iplen),
                                                8 + SvCUR(*av_fetch(pkt,15,0)));
-   sv_setpvn(RETVAL,(u_char*)piur,iplen + 8 + SvCUR(*av_fetch(pkt,15,0)));
+   sv_setpvn(RETVAL,(char*)piur,iplen + 8 + SvCUR(*av_fetch(pkt,15,0)));
    }          
 OUTPUT:
 RETVAL  
@@ -1017,21 +1017,21 @@ CODE:
     memcpy(ptr+20,SvPV(ip_opts,PL_na),SvCUR(ip_opts));
     memcpy(ptr+20+SvCUR(ip_opts),(u_char*)&pii + 20,8);
     ((struct iphdr*)ptr)->check = in_cksum((unsigned short *)ptr,iplen);
-    RETVAL = newSVpv((u_char*)ptr,sizeof(IIPKT)+SvCUR(ip_opts));
+    RETVAL = newSVpv((char*)ptr,sizeof(IIPKT)+SvCUR(ip_opts));
     sv_catsv(RETVAL,*av_fetch(pkt,19,0));
     Safefree(ptr);
     sv_2mortal(ip_opts);
      }
    }
    if(!opt) {
-   RETVAL = newSVpv((u_char*)&pii,sizeof(IIPKT));
+   RETVAL = newSVpv((char*)&pii,sizeof(IIPKT));
    sv_catsv(RETVAL,*av_fetch(pkt,19,0));
    }
    if(!pii.ich.checksum) {
    piir = SvPV(RETVAL,PL_na);
    ((struct icmphdr*)(piir + iplen))->checksum = 
    in_cksum((unsigned short *)(piir + iplen),8 + SvCUR(*av_fetch(pkt,19,0)));
-    sv_setpvn(RETVAL,(u_char*)piir,iplen + 8 + SvCUR(*av_fetch(pkt,19,0)));
+    sv_setpvn(RETVAL,(char*)piir,iplen + 8 + SvCUR(*av_fetch(pkt,19,0)));
    }          
 OUTPUT:
 RETVAL  
@@ -1072,17 +1072,17 @@ CODE:
     iplen = 20 + SvCUR(ip_opts);
     if(!ih.tot_len) ih.tot_len = BSDFIX(20 + SvCUR(ip_opts) + SvCUR(*av_fetch(pkt,11,0)));
     ih.check = 0;
-    RETVAL = newSVpv((u_char*)&ih,20);
+    RETVAL = newSVpv((char*)&ih,20);
     sv_catsv(RETVAL,ip_opts);
     pigr = SvPV(RETVAL,PL_na);
     ((struct iphdr*)pigr)->check = in_cksum((unsigned short *)pigr,iplen);
-    sv_setpvn(RETVAL,(u_char*)pigr,iplen);
+    sv_setpvn(RETVAL,(char*)pigr,iplen);
     sv_catsv(RETVAL,*av_fetch(pkt,11,0));
     sv_2mortal(ip_opts);
      }
    }
    if(!opt) {
-   RETVAL = newSVpv((u_char*)&ih,iplen);
+   RETVAL = newSVpv((char*)&ih,iplen);
    sv_catsv(RETVAL,*av_fetch(pkt,11,0));
    }
 OUTPUT:
@@ -1149,7 +1149,7 @@ CODE:
     memcpy(ptr+20,SvPV(ip_opts,PL_na),SvCUR(ip_opts));
     memcpy(ptr+20+SvCUR(ip_opts),(u_char*)&pit + 20,TCPHDR);
     ((struct iphdr*)ptr)->check = in_cksum((unsigned short *)ptr,4*pit.ih.ihl);
-    RETVAL = newSVpv((u_char*)ptr,sizeof(ITPKT)+SvCUR(ip_opts));
+    RETVAL = newSVpv((char*)ptr,sizeof(ITPKT)+SvCUR(ip_opts));
     sv_catsv(RETVAL,*av_fetch(pkt,27,0));
     Safefree(ptr);
     sv_2mortal(ip_opts);
@@ -1170,7 +1170,7 @@ CODE:
      memcpy(tptr,ptr,SvCUR(RETVAL)-SvCUR(*av_fetch(pkt,27,0)));
      memcpy(tptr+(SvCUR(RETVAL)-SvCUR(*av_fetch(pkt,27,0))),
                             SvPV(tcp_opts,PL_na),SvCUR(tcp_opts));
-     sv_setpvn(RETVAL,tptr,SvCUR(RETVAL) + SvCUR(tcp_opts) -
+     sv_setpvn(RETVAL,(char *)tptr,SvCUR(RETVAL) + SvCUR(tcp_opts) -
                                                   SvCUR(*av_fetch(pkt,27,0)));
      sv_catsv(RETVAL,*av_fetch(pkt,27,0));
           }
@@ -1182,7 +1182,7 @@ CODE:
      tptr = (u_char*)safemalloc(40+SvCUR(tcp_opts));
      memcpy(tptr,&pit,40);
      memcpy(tptr+40,SvPV(tcp_opts,PL_na),SvCUR(tcp_opts));
-     RETVAL = newSVpv(tptr,40+SvCUR(tcp_opts));
+     RETVAL = newSVpv((char*)tptr,40+SvCUR(tcp_opts));
      sv_catsv(RETVAL,*av_fetch(pkt,27,0));
      } 	  	     
      Safefree(tptr);
@@ -1191,7 +1191,7 @@ CODE:
      }
    }
    if(!opt){
-     RETVAL = newSVpv((u_char*)&pit,sizeof(ITPKT));
+     RETVAL = newSVpv((char*)&pit,sizeof(ITPKT));
      sv_catsv(RETVAL,*av_fetch(pkt,27,0));
    }
    if(!pit.th.check) {
@@ -1200,7 +1200,7 @@ CODE:
    ip_in_cksum((struct iphdr *)pitr,(unsigned short *)(pitr + iplen),
                           4*((struct tcphdr*)(pitr + iplen))->doff + 
                                                 SvCUR(*av_fetch(pkt,27,0)));
-   sv_setpvn(RETVAL,(u_char*)pitr,iplen+
+   sv_setpvn(RETVAL,(char*)pitr,iplen+
    4*((struct tcphdr*)(pitr + iplen))->doff + SvCUR(*av_fetch(pkt,27,0)));
    }         
 OUTPUT:
@@ -1216,6 +1216,7 @@ open_live(device,snaplen,promisc,to_ms,ebuf)
 CODE:
      ebuf = (char*)safemalloc(PCAP_ERRBUF_SIZE);
      RETVAL = pcap_open_live(device,snaplen,promisc,to_ms,ebuf);     
+     Safefree(ebuf);
 OUTPUT:
 ebuf
 RETVAL
@@ -1227,6 +1228,7 @@ open_offline(fname,ebuf)
 CODE:
      ebuf = (char*)safemalloc(PCAP_ERRBUF_SIZE);
      RETVAL = pcap_open_offline(fname,ebuf);
+     Safefree(ebuf);
 OUTPUT:
 ebuf
 RETVAL
@@ -1246,6 +1248,7 @@ lookupdev(ebuf)
 CODE:
      ebuf = (char*)safemalloc(PCAP_ERRBUF_SIZE);
      RETVAL = pcap_lookupdev(ebuf);
+     Safefree(ebuf);
 OUTPUT:
 ebuf
 RETVAL
@@ -1259,6 +1262,7 @@ lookupnet(device,netp,maskp,ebuf)
 CODE:
      ebuf = (char*)safemalloc(PCAP_ERRBUF_SIZE);
      RETVAL = pcap_lookupnet(device,&netp,&maskp,ebuf);
+     Safefree(ebuf);
 OUTPUT:
 netp
 maskp
@@ -1284,7 +1288,7 @@ dispatch(p,cnt,print,user)
 CODE:
     printer = print;
     if(!SvROK(user) && SvOK(user)){
-    (u_char *)user = SvIV(user); 
+    user = (SV *) SvIV(user); 
     ptr = &handler;
     }
     else {
@@ -1306,7 +1310,7 @@ loop(p,cnt,print,user)
 CODE:
     printer = print;
     if(!SvROK(user) && SvOK(user)){
-    (u_char *)user = SvIV(user); 
+    user = (SV *)SvIV(user); 
     ptr = &handler;
     }
     else {
@@ -1330,6 +1334,7 @@ compile(p,fp,str,optimize,netmask)
 CODE:
     fp = (struct bpf_program *)safemalloc(sizeof(struct bpf_program));
     RETVAL = pcap_compile(p,fp,str,optimize,netmask);
+    Safefree(fp);
 OUTPUT: 
 fp
 RETVAL
@@ -1365,9 +1370,9 @@ CODE:
    hdr = (u_char *)SvPV(h,len) ;
    next = pcap_next(p,(struct pcap_pkthdr*)hdr);
    if(next)
-   RETVAL = newSVpv((u_char *)next,((struct pcap_pkthdr*)hdr)->caplen);
+   RETVAL = newSVpv((char *)next,((struct pcap_pkthdr*)hdr)->caplen);
    else RETVAL = newSViv(0);
-   sv_setpvn(h,hdr,len);
+   sv_setpvn(h,(char *)hdr,len);
 OUTPUT:
 h
 RETVAL

@@ -1,29 +1,29 @@
 # Create sub modules 
 package Net::RawIP::iphdr;
 use Class::Struct qw(struct);
-my @iphdr = qw(version ihl tos tot_len id frag_off ttl protocol check saddr 
-daddr);
+our @iphdr 
+    = qw(version ihl tos tot_len id frag_off ttl protocol check saddr daddr);
 struct ( 'Net::RawIP::iphdr' => [ map { $_ => '$' } @iphdr ] );
 
 package Net::RawIP::tcphdr;
 use Class::Struct qw(struct);
-my @tcphdr = qw(source dest seq ack_seq doff res1 res2 urg ack psh rst syn
-fin window check urg_ptr data);
+our @tcphdr = qw(source dest seq ack_seq doff res1 res2 urg ack psh rst syn
+    fin window check urg_ptr data);
 struct ( 'Net::RawIP::tcphdr' => [map { $_ => '$' } @tcphdr ] );
 
 package Net::RawIP::udphdr;
 use Class::Struct qw(struct);
-my @udphdr = qw(source dest len check data);
+our @udphdr = qw(source dest len check data);
 struct ( 'Net::RawIP::udphdr' => [map { $_ => '$' } @udphdr ] );
 
 package Net::RawIP::icmphdr;
 use Class::Struct qw(struct);
-my @icmphdr = qw(type code check gateway id sequence unused mtu data);
+our @icmphdr = qw(type code check gateway id sequence unused mtu data);
 struct ( 'Net::RawIP::icmphdr' => [map { $_ => '$' } @icmphdr ] );
 
 package Net::RawIP::generichdr;
 use Class::Struct qw(struct);
-my @generichdr = qw(data);
+our @generichdr = qw(data);
 struct ( 'Net::RawIP::generichdr' => [map { $_ => '$' } @generichdr ] );
 
 package Net::RawIP::opt;
@@ -33,13 +33,16 @@ struct ( 'Net::RawIP::opt' => [map { $_ => '@' } @opt ] );
 
 package Net::RawIP::ethhdr;
 use Class::Struct qw(struct);
-my @ethhdr = qw(dest source proto);
+our @ethhdr = qw(dest source proto);
 struct ( 'Net::RawIP::ethhdr' => [map { $_ => '$' } @ethhdr ] );
 
 # Main package 
 package Net::RawIP;
+use strict;
+use warnings;
+
 use Carp;
-use vars qw($VERSION @ISA @EXPORT @EXPORT_OK $AUTOLOAD);
+use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $AUTOLOAD);
 use subs qw(timem ifaddrlist);
 
 require Exporter;
@@ -53,6 +56,7 @@ PCAP_ERRBUF_SIZE PCAP_VERSION_MAJOR PCAP_VERSION_MINOR lib_pcap_h
 open_live open_offline dump_open lookupdev lookupnet dispatch
 loop dump compile setfilter next datalink snapshot is_swapped major_version
 minor_version stats file fileno perror geterr strerror close dump_close);  
+
 %EXPORT_TAGS = ( 'pcap' => [
 qw(
 PCAP_ERRBUF_SIZE PCAP_VERSION_MAJOR PCAP_VERSION_MINOR lib_pcap_h
@@ -61,9 +65,17 @@ loop dump compile setfilter next datalink snapshot is_swapped major_version
 minor_version stats file fileno perror geterr strerror close dump_close
 timem linkoffset ifaddrlist rdev)  
                             ]
-	       );	  	    
+);
 
-$VERSION = '0.2';
+$VERSION = '0.21_01';
+
+# The number of members in the sub modules
+my %n = (
+    tcp     => 17,
+    udp     => 5,
+    icmp    => 9,
+    generic => 1,
+); 
 
 sub AUTOLOAD {
     my $constname;
@@ -71,13 +83,13 @@ sub AUTOLOAD {
     croak "& not defined" if $constname eq 'constant';
     my $val = constant($constname, @_ ? $_[0] : 0);
     if ($! != 0) {
-	if ($! =~ /Invalid/) {
-	    $AutoLoader::AUTOLOAD = $AUTOLOAD;
-	    goto &AutoLoader::AUTOLOAD;
-	}
-	else {
-		croak "Your vendor has not defined Net::RawIP macro $constname";
-	}
+        if ($! =~ /Invalid/) {
+            $AutoLoader::AUTOLOAD = $AUTOLOAD;
+            goto &AutoLoader::AUTOLOAD;
+        }
+        else {
+            croak "Your vendor has not defined Net::RawIP macro $constname";
+        }
     }
     *$AUTOLOAD = sub () { $val };
     goto &$AUTOLOAD;
@@ -87,514 +99,548 @@ bootstrap Net::RawIP $VERSION;
 # Warn if called from non-root accounts
 carp "Must have EUID == 0 to use Net::RawIP" if $>;
 
-# To prevent spurious warnings.  Actually, that doesn't work all too well;
-# callers might have to set $^W to 0 themselves.
-local $^W = 0;
 
 # The constructor
 sub new {
- my ($proto,$ref) = @_;
- my $class = ref($proto) || $proto;
- my $self = {};
- bless $self,$class;
-# The sub protocol determination (tcp by default) 
- $self->proto($ref);
-# The values by default
- $self->_unpack($ref);;
- return $self
+    my ($proto, $ref) = @_;
+    my $class = ref($proto) || $proto;
+    my $self = {};
+    bless $self,$class;
+    # The sub protocol determination (tcp by default) 
+    $self->proto($ref);
+    # The values by default
+    $self->_unpack($ref);;
+    return $self
 }
 
 sub proto {
- my ($class,$args) = @_;
- my @proto = qw(tcp udp icmp generic);
- my $proto;
- unless ($class->{'proto'}){
- map {$proto = $_ if exists $args->{$_} } @proto;
- $proto = 'tcp' unless $proto;
- $class->{'proto'} = $proto;
- }
- return $class->{'proto'}
+    my ($class, $args) = @_;
+    my @proto = qw(tcp udp icmp generic);
+    if (not $class->{proto}) {
+        my $proto = 'tcp';
+        foreach (@proto) {
+            if (exists $args->{$_}) {
+                $proto = $_;
+            }
+        }
+        $class->{proto} = $proto;
+    }
+    return $class->{proto}
 }
 
 # IP and TCP options 
 sub optset {
- my($class,%arg) = @_;
-# The number of members in the sub modules
- my %n = ('tcp',17,'udp',5,'icmp',9,'generic',1); 
- my $optproto;
- my $i;
- my $len;
-# Initialize Net::RawIP::opt objects from argument
- map {
-    my @array;
-    $optproto = $_;
-    $class->{"opts$optproto"} = new Net::RawIP::opt 
-                                           unless $class->{"opts$optproto"};
-    @{$class->{"opts$optproto"}->type} = ();
-    @{$class->{"opts$optproto"}->len} = ();
-    @{$class->{"opts$optproto"}->data} = ();
-    map {
-     @{$class->{"opts$optproto"}->$_()} = @{${$arg{$optproto}}{$_}};
-        } 
-    keys %{$arg{$optproto}};
-      $i = 0;
-# Count lengths of options 
-    map {
-$len = length($class->{"opts$optproto"}->data($i));
-$len = 38 if $len > 38;
-$class->{"opts$optproto"}->len($i,2+$len);
-        $i++
+    my ($class, %arg) = @_;
+
+
+    # Initialize Net::RawIP::opt objects from argument
+    foreach my $optproto (sort keys %arg) {
+        my $option = "opts$optproto";
+        if (not $class->{$option}) {
+            $class->{$option} = Net::RawIP::opt->new;
         }
-     @{${$arg{$optproto}}{'data'}};
-# Fill an array with types,lengths,datas and put the reference of this array  
-# to the sub module as last member   
-    $i = 0;
-    map { 
-    push @array,
-    ($_,$class->{"opts$optproto"}->len($i),$class->{"opts$optproto"}->data($i));
-    $i++;
-     } @{$class->{"opts$optproto"}->type}; 
-    $i = 0;
-    if($optproto eq 'tcp'){
-    $i = 1;
-    ${$class->{'tcphdr'}}[17] = 0 unless defined ${$class->{'tcphdr'}}[17];
-    } 
-    ${$class->{"$class->{'proto'}hdr"}}[$i+$n{$class->{'proto'}}] = [(@array)]
- } sort keys %arg;
-# Repacking current packet
-$class->_pack(1);
+        @{$class->{$option}->type} = ();
+        @{$class->{$option}->len}  = ();
+        @{$class->{$option}->data} = ();
+        foreach my $k (keys %{ $arg{$optproto} }) {
+            @{ $class->{$option}->$k() } = @{ $arg{$optproto}->{$k} };
+        }
+
+        # Compute lengths of options 
+        foreach my $i (0..@{ $arg{$optproto}->{data} }-1) {
+            my $len = length($class->{$option}->data($i));
+            $len = 38 if $len > 38;
+            $class->{$option}->len($i, 2+$len);
+        }
+
+        # Fill an array with types,lengths,datas and put the reference of this array  
+        # to the sub module as last member   
+        my @array;
+        foreach my $i (0 .. @{ $class->{$option}->type }-1 ) {
+            push @array, (
+                    $class->{$option}->type($i), 
+                    $class->{$option}->len($i), 
+                    $class->{$option}->data($i)
+                );
+        }
+
+        my $i = 0;
+        if ($optproto eq 'tcp') {
+            $i = 1;
+            $class->{tcphdr}->[17] = 0 unless defined $class->{tcphdr}->[17];
+        }
+        ${ $class->{"$class->{proto}hdr"} }[ $i + $n{$class->{proto}} ] = [(@array)]
+    }
+
+    # Repacking current packet
+    return $class->_pack(1);
 }
 
 sub optget {
-my($class,%arg) = @_;
-my @array;
-my $optproto;
-my $i = 0;
-my $type;
-my %n = ('tcp',17,'udp',5,'icmp',9,'generic',1);
-map {
-  $optproto = $_;
-# Get whole array if not specified type of option
-  if(!exists ${$arg{"$optproto"}}{'type'}){
-  if($optproto eq 'tcp'){$i = 1}
-  push @array,
-    (@{${$class->{"$class->{'proto'}hdr"}}[$i+$n{$class->{'proto'}}]});
-  }
-  else 
-# Get array filled with specified options 
-  {
-    $i = 0;
-  map {
-    $type = $_;
-    $i = 0; 
-    map {
-       if($type == $_){
-  push @array,($class->{"opts$optproto"}->type($i));       
-  push @array,($class->{"opts$optproto"}->len($i));       
-  push @array,($class->{"opts$optproto"}->data($i));       
-       }
-     $i++;
-     } @{$class->{"opts$optproto"}->type()};
-   } @{${$arg{"$optproto"}}{'type'}};
-  } 
-    } sort keys %arg;
-return (@array)
+    my ($class, %arg) = @_;
+    my @array;
+    foreach my $optproto (sort keys %arg) {
+        # Get whole array if not specified type of option
+        if (!exists $arg{$optproto}->{type}) {
+            my $i = 0;
+            if ($optproto eq 'tcp'){
+                $i = 1;
+            }
+            push @array,
+                (@{${$class->{"$class->{proto}hdr"}}[$i+$n{$class->{proto}}]});
+        }
+        else {
+            # Get array filled with specified options 
+            foreach my $type (@{ $arg{$optproto}->{type} }) {
+                my $option = "opts$optproto";
+                foreach my $i (0 .. @{ $class->{$option}->type() }-1 ) {
+                    if ($type == $_) {
+                        push @array,($class->{$option}->type($i));       
+                        push @array,($class->{$option}->len($i));       
+                        push @array,($class->{$option}->data($i));       
+                    }
+                }
+            }
+        } 
+    }
+
+    return (@array)
 }
 
 sub optunset {
-my($class,@arg) = @_;
-my @array;
-my $optproto;
-my $i = 0;
-my %n = ('tcp',17,'udp',5,'icmp',9,'generic',1);
-map {
-  $optproto = $_;
-  if($optproto eq 'tcp'){
-  $i = 1;
-# Look at RFC
-  $class->{'tcphdr'}->doff(5);
-  }
-  else 
-  {
-# Look at RFC
-  $class->{'iphdr'}->ihl(5);
-  }
-  $class->{"opts$optproto"} = 0;
-  ${$class->{"$class->{'proto'}hdr"}}[$i+$n{$class->{'proto'}}] = 0;
-    } sort @arg;
-$class->_pack(1);
+    my($class, @arg) = @_;
+
+    my $i = 0;
+    foreach my $optproto (sort @arg) {
+        if ($optproto eq 'tcp') {
+            $i = 1;
+            # Look at RFC
+            $class->{tcphdr}->doff(5);
+        }
+        else {
+            # Look at RFC
+            $class->{iphdr}->ihl(5);
+        }
+        $class->{"opts$optproto"} = 0;
+        ${$class->{"$class->{proto}hdr"}}[$i+$n{$class->{proto}}] = 0;
+    }
+    return $class->_pack(1);
 }
 
 # An ethernet related initialization
 # We open descriptor and get hardware and IP addresses of device by tap()   
 sub ethnew {
- my($class,$dev,@arg) = @_;
- my($ip,$mac);
- $class->{'ethhdr'} = new Net::RawIP::ethhdr; 
- $class->{'tap'} = tap($dev,$ip,$mac);
- $class->{'ethdev'} = $dev;
- $class->{'ethmac'} = $mac;
- $class->{'ethip'} = $ip; 
- $class->{'ethhdr'}->dest($mac);
- $class->{'ethhdr'}->source($mac); 
- my $ipproto = pack ("n1",0x0800);
- $class->{'ethpack'}=$class->{'ethhdr'}->dest
-                    .$class->{'ethhdr'}->source
-		    .$ipproto;
- $class->ethset(@arg) if @arg;
+    my ($class, $dev, @arg) = @_;
+
+    my ($ip, $mac);
+    $class->{ethhdr}  = Net::RawIP::ethhdr->new; 
+    $class->{tap}     = tap($dev, $ip, $mac);
+    $class->{ethdev}  = $dev;
+    $class->{ethmac}  = $mac;
+    $class->{ethip}   = $ip; 
+    $class->{ethhdr}->dest($mac);
+    $class->{ethhdr}->source($mac); 
+    my $ipproto       = pack ("n1",0x0800);
+    $class->{ethpack} =
+        $class->{ethhdr}->dest . $class->{ethhdr}->source . $ipproto;
+    $class->ethset(@arg) if @arg;
 }
 
 
 sub ethset {
- my($self,%hash) = @_;
- map { $self->{'ethhdr'}->$_($hash{$_}) } keys %hash;
- my $source = $self->{'ethhdr'}->source;
- my $dest = $self->{'ethhdr'}->dest;
+    my ($self, %hash) = @_;
+    map { $self->{ethhdr}->$_($hash{$_}) } keys %hash;
+    my $source = $self->{ethhdr}->source;
+    my $dest   = $self->{ethhdr}->dest;
  
- if ($source =~ /^(\w\w):(\w\w):(\w\w):(\w\w):(\w\w):(\w\w)$/)
- {
- $self->{'ethhdr'}->source(
-                     pack("C6",hex($1),hex($2),hex($3),hex($4),hex($5),hex($6))
-	                  );
- $source = $self->{'ethhdr'}->source;
- }
+    if ($source =~ /^(\w\w):(\w\w):(\w\w):(\w\w):(\w\w):(\w\w)$/) {
+        $self->{ethhdr}->source(
+            pack("C6",hex($1),hex($2),hex($3),hex($4),hex($5),hex($6))
+        );
+        $source = $self->{ethhdr}->source;
+    }
 
- if ($dest =~ /^(\w\w):(\w\w):(\w\w):(\w\w):(\w\w):(\w\w)$/)
- {
- $self->{'ethhdr'}->dest(
-                     pack("C6",hex($1),hex($2),hex($3),hex($4),hex($5),hex($6))
-		        );
- $dest = $self->{'ethhdr'}->dest;
- }  
-# host_to_ip returns IP address of target in host byteorder format
- $self->{'ethhdr'}->source(mac(host_to_ip($source)))
- unless($source =~ /[^A-Za-z0-9\-.]/ && length($source) == 6);
- $self->{'ethhdr'}->dest(mac(host_to_ip($dest)))
- unless($dest =~ /[^A-Za-z0-9\-.]/ && length($dest) == 6);
- my $ipproto = pack ("n1",0x0800);
- $self->{'ethpack'}=$self->{'ethhdr'}->dest.$self->{'ethhdr'}->source.$ipproto;
+    if ($dest =~ /^(\w\w):(\w\w):(\w\w):(\w\w):(\w\w):(\w\w)$/) {
+        $self->{ethhdr}->dest(
+            pack("C6", hex($1),hex($2),hex($3),hex($4),hex($5),hex($6))
+        );
+        $dest = $self->{ethhdr}->dest;
+    }
+
+    # host_to_ip returns IP address of target in host byteorder format
+    $self->{ethhdr}->source(mac(host_to_ip($source)))
+    unless($source =~ /[^A-Za-z0-9\-.]/ && length($source) == 6);
+    $self->{ethhdr}->dest(mac(host_to_ip($dest)))
+    unless($dest =~ /[^A-Za-z0-9\-.]/ && length($dest) == 6);
+    my $ipproto = pack ("n1",0x0800);
+    $self->{ethpack}=$self->{ethhdr}->dest.$self->{ethhdr}->source.$ipproto;
 }
 
-# Lookup for mac addresse in the ARP cache table 
+# Lookup for mac address in the ARP cache table 
 # If not successul then send ICMP packet to target and retry lookup
 sub mac {
- my $ip = $_[0];
- my $mac;
- my $obj;
-    if(mac_disc($ip,$mac)){
-    return $mac;
-    }
-    else{
-    $obj = new Net::RawIP ({ip => {saddr => 0,
-                                   daddr => $ip},
-			    icmp => {}
-			  });
+    my ($ip) = @_;
+    my $mac;
+
+    return $mac if mac_disc($ip, $mac);
+
+    my $obj = Net::RawIP->new({
+                        ip => {
+                            saddr => 0,
+                            daddr => $ip,
+                        },
+                        icmp => {},
+                    });
     $obj->send(1,1);
-        if(mac_disc($ip,$mac)){
-	  return $mac;
-        }
-        else {
-	my $ipn = sprintf("%u.%u.%u.%u",unpack("C4",pack("N1",$ip)));
-	croak "Can't discover MAC address for $ipn";
-	}
-    }
+    return $mac if mac_disc($ip,$mac);
+
+    my $ipn = sprintf("%u.%u.%u.%u", unpack("C4", pack("N1",$ip)));
+    croak "Can't discover MAC address for $ipn";
 }
 
 sub ethsend {
-my ($self,$delay,$times) = @_;
-if(!$times){
-$times = 1;
+    my ($self, $delay, $times) = @_;
+    $times ||= 1;
+
+    for (1..$times) {
+        # The send_eth_packet takes the descriptor,the name of device,the scalar
+        # with packed ethernet packet and the flag (0 - non-ip contents,1 - otherwise)  
+        send_eth_packet(
+            $self->{tap},
+            $self->{ethdev},
+            $self->{ethpack} . $self->{pack},
+            1);
+        select(undef,undef,undef,$delay) if $delay;
+    }
 }
-while($times){
-# The send_eth_packet takes the descriptor,the name of device,the scalar
-# with packed ethernet packet and the flag (0 - non-ip contents,1 - otherwise)  
-send_eth_packet($self->{'tap'},$self->{'ethdev'},
-           $self->{'ethpack'}.$self->{'pack'},1);
-select(undef,undef,undef,$delay) if $delay;
-$times--
-}
-} 
 
 # Allow to send any frames
 sub send_eth_frame {
-my ($self,$frame,$delay,$times) = @_;
-if(!$times){
-$times = 1;
-}
-while($times){
-send_eth_packet($self->{'tap'},$self->{'ethdev'},
-           substr($self->{'ethpack'},0,12).$frame,0);
-select(undef,undef,undef,$delay) if $delay;
-$times--
-}
+    my ($self, $frame, $delay, $times) = @_;
+    $times ||= 1;
+
+    for (1..$times) {
+        send_eth_packet(
+            $self->{tap},
+            $self->{ethdev},
+            substr($self->{ethpack}, 0, 12) . $frame,
+            0);
+        select(undef,undef,undef,$delay) if $delay;
+    }
 } 
 
 # The initialization with default values
 sub _unpack {
- my ($self,$ref) = @_;
- $self->{'iphdr'} = new Net::RawIP::iphdr;
- eval '$self->{'."$self->{'proto'}".'hdr} = new Net::RawIP::'."$self->{'proto'}".'hdr';
- eval '$self->'."$self->{'proto'}_default"; 
- $self->set($ref);
+    my ($self, $ref) = @_;
+
+    $self->{iphdr} = Net::RawIP::iphdr->new;
+
+    my $class = 'Net::RawIP::' . $self->{proto} . 'hdr';
+    $self->{"$self->{proto}hdr"} = $class->new;
+
+    my $default_method = $self->{proto} . '_default';
+    $self->$default_method;
+
+    $self->set($ref);
 }
 
 sub tcp_default {
-my ($class) = @_;
-@{$class->{'iphdr'}} = (4,5,16,0,0,0x4000,64,6,0,0,0);
-@{$class->{'tcphdr'}} = (0,0,0,0,5,0,0,0,0,0,0,0,0,0xffff,0,0,'');
+    my ($class) = @_;
+    @{$class->{iphdr}} = (4,5,16,0,0,0x4000,64,6,0,0,0);
+    @{$class->{tcphdr}} = (0,0,0,0,5,0,0,0,0,0,0,0,0,0xffff,0,0,'');
 }
 
 sub udp_default {
-my ($class) = @_;
-@{$class->{'iphdr'}} = (4,5,16,0,0,0x4000,64,17,0,0,0);
-@{$class->{'udphdr'}} = (0,0,0,0,'');
+    my ($class) = @_;
+    @{$class->{iphdr}} = (4,5,16,0,0,0x4000,64,17,0,0,0);
+    @{$class->{udphdr}} = (0,0,0,0,'');
 }
 
 sub icmp_default {
-my ($class) = @_;
-@{$class->{'iphdr'}} = (4,5,16,0,0,0x4000,64,1,0,0,0); 	       
-@{$class->{'icmphdr'}} = (0,0,0,0,0,0,0,0,'');
+    my ($class) = @_;
+    @{$class->{iphdr}} = (4,5,16,0,0,0x4000,64,1,0,0,0);
+    @{$class->{icmphdr}} = (0,0,0,0,0,0,0,0,'');
 }
 
 sub generic_default {
-my ($class) = @_;
-@{$class->{'iphdr'}} = (4,5,16,0,0,0x4000,64,0,0,0,0); 	       
-@{$class->{'generichdr'}} = ('');
+    my ($class) = @_;
+    @{$class->{iphdr}} = (4,5,16,0,0,0x4000,64,0,0,0,0);
+    @{$class->{generichdr}} = ('');
 }
 
 sub s2i {
-return unpack("I1",pack("S2",@_))
+    return unpack("I1", pack("S2", @_))
 }
 
 sub _pack {
-my $self = shift;
-if (@_){
-my @array;
-push @array,@{$self->{'iphdr'}},@{$self->{"$self->{'proto'}hdr"}};
-# A low level *_pkt_creat() functions take reference of array 
-# with all of fields of the packet and return properly packed scalar  
-eval '$self->{\'pack\'} = '."$self->{'proto'}".'_pkt_creat (\@array)';
-}
-return $self->{'pack'};
+    my $self = shift;
+    if (@_) {
+        my @array = (@{$self->{iphdr}}, @{$self->{"$self->{proto}hdr"}});
+        # A low level *_pkt_creat() functions take reference of array 
+        # with all of fields of the packet and return properly packed scalar  
+        my $function = $self->{proto} . '_pkt_creat';
+        no strict 'refs';
+        # not clear to me what is undef here but it trips one of the tests
+        no warnings; 
+        $self->{pack} = $function->(\@array);
+    }
+
+    return $self->{pack};
 }
 
-sub packet{
-my $class = shift;
-return $class->_pack
+sub packet {
+    my $class = shift;
+    return $class->_pack
 }
 
 sub set {
-my ($self,$hash) = @_;
-# For handle C union in the ICMP header
-my %un = qw(id sequence unused mtu);
-my %revun = reverse %un;
-my $meth; #XXX Why perl doesn't understand simple ->$un{$_}() ? 
-# See Class::Struct
-map {$self->{'iphdr'}->$_(${$hash->{'ip'}}{$_}) } keys %{$hash->{'ip'}}
-if exists $hash->{'ip'};
-map {$self->{"$self->{'proto'}hdr"}->$_(${$hash->{"$self->{'proto'}"}}{$_}) }
-keys %{$hash->{"$self->{'proto'}"}}
-if exists $hash->{"$self->{'proto'}"};
-map {   
-$self->{'icmphdr'}->$_(${$hash->{'icmp'}}{$_});
-if(!/gateway/){
-        if($un{$_}){ 
-	     $meth = $un{$_};
-             $self->{icmphdr}->gateway(s2i(($self->{icmphdr}->$_()),
-                              ($self->{icmphdr}->$meth())))
-        }       
-        elsif($revun{$_}){ 
-	    $meth = $revun{$_};
-            $self->{icmphdr}->gateway(s2i(($self->{icmphdr}->$meth()),
-            ($self->{icmphdr}->$_())))
+    my ($self, $hash) = @_;
+    # For handle C union in the ICMP header
+    my %un = (
+            id     => 'sequence',
+            unused => 'mtu',
+    );
+    my %revun = reverse %un;
+
+    # See Class::Struct
+    if (exists $hash->{ip}) {
+        foreach my $k (keys %{ $hash->{ip} }) {
+            $self->{iphdr}->$k( $hash->{ip}->{$k});
+        } 
+    }
+
+    my $proto = $self->{proto};
+    if (exists $hash->{$proto}) {
+        foreach my $k (keys %{ $hash->{$proto} }) {
+            $self->{"${proto}hdr"}->$k( $hash->{$proto}->{$k} )
         }
-   } 
-} keys %{$hash->{icmp}} if exists $hash->{icmp};
-my $saddr = $self->{iphdr}->saddr;
-my $daddr = $self->{iphdr}->daddr;
-$self->{iphdr}->saddr(host_to_ip($saddr)) if($saddr !~ /^-?\d*$/);
-$self->{iphdr}->daddr(host_to_ip($daddr)) if($daddr !~ /^-?\d*$/);
-$self->_pack(1);
+    }
+
+    if (exists $hash->{icmp}) {
+        foreach (keys %{$hash->{icmp}}) {
+            $self->{icmphdr}->$_(${$hash->{icmp}}{$_});
+            if (!/gateway/) {
+                if ($un{$_}) { 
+                    my $meth = $un{$_};
+                    $self->{icmphdr}->gateway(s2i(
+                                    ($self->{icmphdr}->$_()),
+                                    ($self->{icmphdr}->$meth())
+                                    ));
+                }       
+                elsif ($revun{$_}) {
+                    my $meth = $revun{$_};
+                    $self->{icmphdr}->gateway(s2i(
+                                        ($self->{icmphdr}->$meth()),
+                                        ($self->{icmphdr}->$_())
+                                        ));
+                }
+            }
+        }
+    }
+
+    my $saddr = $self->{iphdr}->saddr;
+    my $daddr = $self->{iphdr}->daddr;
+    $self->{iphdr}->saddr(host_to_ip($saddr)) if($saddr !~ /^-?\d*$/);
+    $self->{iphdr}->daddr(host_to_ip($daddr)) if($daddr !~ /^-?\d*$/);
+    return $self->_pack(1);
 }
 
 sub bset {
-my ($self,$hash,$eth) = @_;
-my $array;
-my $i;
-my $j;
-my %n = ('tcp',17,'udp',5,'icmp',9,'generic',1);
-  if($eth){
-$self->{'ethpack'} = substr($hash,0,14);
-$hash = substr($hash,14);
-@{$self->{'ethhdr'}} = @{eth_parse($self->{'ethpack'})}
-  } 
-  $self->{'pack'} = $hash;
-# The low level *_pkt_parse() functions take packet and return reference of
-# of the array with fields from this packet
-  eval '$array ='."$self->{'proto'}_pkt_parse(".'$hash)'; 
-# Initialization of IP header object
-  @{$self->{'iphdr'}} = @$array[0..10];
-# Initialization of sub IP object
- @{$self->{"$self->{'proto'}hdr"}}= @$array[11..(@$array-1)];
-# If last member in the sub object is a reference of 
-# array with options then we have to initialize Net::RawIP::opt 
-  if(ref(${$self->{"$self->{'proto'}hdr"}}[$n{$self->{'proto'}}]) eq 'ARRAY'){
- $j = 0;
- $self->{'optsip'} = new Net::RawIP::opt  unless $self->{'optsip'};
- @{$self->{'optsip'}->type} = ();
- @{$self->{'optsip'}->len} = ();
- @{$self->{'optsip'}->data} = ();
-    for($i=0;$i<=(@{${$self->{"$self->{'proto'}hdr"}}[$n{$self->{'proto'}}]} - 2);$i = $i + 3){
- $self->{'optsip'}->type($j,
-                 ${${$self->{"$self->{'proto'}hdr"}}[$n{$self->{'proto'}}]}[$i]);
- $self->{'optsip'}->len($j,
-               ${${$self->{"$self->{'proto'}hdr"}}[$n{$self->{'proto'}}]}[$i+1]);
- $self->{'optsip'}->data($j,
-               ${${$self->{"$self->{'proto'}hdr"}}[$n{$self->{'proto'}}]}[$i+2]);
- $j++;
+    my ($self, $hash, $eth) = @_;
+
+    if ($eth) {
+        $self->{ethpack}   = substr($hash,0,14);
+        $hash              = substr($hash,14);
+        @{$self->{ethhdr}} = @{eth_parse($self->{ethpack})}
     }
-  }
-# For handle TCP options
- if($self->{'proto'} eq 'tcp'){
-  if(ref(${$self->{'tcphdr'}}[18]) eq 'ARRAY'){
-$j = 0;
- $self->{'optstcp'} = new Net::RawIP::opt  unless $self->{'optstcp'};
- @{$self->{'optstcp'}->type} = ();
- @{$self->{'optstcp'}->len} = ();
- @{$self->{'optstcp'}->data} = ();
-    for($i=0;$i<=(@{${$self->{'tcphdr'}}[18]} - 2);$i = $i + 3){
- $self->{'optstcp'}->type($j,
-                 ${${$self->{'tcphdr'}}[18]}[$i]);
- $self->{'optstcp'}->len($j,
-               ${${$self->{'tcphdr'}}[18]}[$i+1]);
- $self->{'optstcp'}->data($j,
-               ${${$self->{'tcphdr'}}[18]}[$i+2]);
- $j++;
+    $self->{pack} = $hash;
+
+    # The low level *_pkt_parse() functions take packet and return reference of
+    # of the array with fields from this packet
+    my $function = $self->{proto} . '_pkt_parse';
+    no strict 'refs';
+    my $array = $function->($hash);
+    use strict;
+
+    my $proto_hdr = "$self->{proto}hdr";
+
+    # Initialization of IP header object
+    @{$self->{iphdr}} = @$array[0..10];
+    # Initialization of sub IP object
+    @{$self->{$proto_hdr}}= @$array[11..(@$array-1)];
+    # If last member in the sub object is a reference of 
+    # array with options then we have to initialize Net::RawIP::opt 
+    if (ref(${$self->{$proto_hdr}}[$n{$self->{proto}}]) eq 'ARRAY') {
+        my $j = 0;
+        $self->{optsip} = Net::RawIP::opt->new  unless $self->{optsip};
+        @{$self->{optsip}->type} = ();
+        @{$self->{optsip}->len}  = ();
+        @{$self->{optsip}->data} = ();
+        for(my $i=0; $i<=(@{${$self->{$proto_hdr}}[$n{$self->{proto}}]} - 2); $i = $i + 3) {
+            $self->{optsip}->type($j,
+                ${${$self->{$proto_hdr}}[$n{$self->{proto}}]}[$i]);
+            $self->{optsip}->len($j,
+                ${${$self->{$proto_hdr}}[$n{$self->{proto}}]}[$i+1]);
+            $self->{optsip}->data($j,
+                ${${$self->{$proto_hdr}}[$n{$self->{proto}}]}[$i+2]);
+            $j++;
+        }
     }
-  }
- }
+
+    # For handle TCP options
+    if($self->{proto} eq 'tcp') {
+        if (ref(${$self->{tcphdr}}[18]) eq 'ARRAY') {
+            my $j = 0;
+            $self->{optstcp} = Net::RawIP::opt->new  unless $self->{optstcp};
+            @{$self->{optstcp}->type} = ();
+            @{$self->{optstcp}->len}  = ();
+            @{$self->{optstcp}->data} = ();
+            for (my $i=0; $i<=(@{${$self->{tcphdr}}[18]} - 2); $i = $i + 3) {
+                $self->{optstcp}->type($j,
+                    ${${$self->{tcphdr}}[18]}[$i]);
+                $self->{optstcp}->len($j,
+                    ${${$self->{tcphdr}}[18]}[$i+1]);
+                $self->{optstcp}->data($j,
+                    ${${$self->{tcphdr}}[18]}[$i+2]);
+                $j++;
+            }
+        }
+    }
 }
 
-
 sub get {
-my ($self,$hash) = @_;
-my $a = wantarray;
-my @iphdr = qw(version ihl tos tot_len id frag_off ttl protocol check saddr 
-daddr);
-my @tcphdr = qw(source dest seq ack_seq doff res1 res2 urg ack psh rst syn
-fin window check urg_ptr data);
-my @udphdr = qw(source dest len check data);
-my @icmphdr = qw(type code check gateway id sequence unused mtu data);
-my @generichdr = qw(data);
-my @ethhdr = qw(dest source proto);
-my %ref =
-('tcp',\@tcphdr,'udp',\@udphdr,'icmp',\@icmphdr,'generic',\@generichdr);
-my @array;
-my %h;
+    my ($self, $hash) = @_;
 
-map { ${$$hash{ethh}}{$_} = '$' } @{$hash->{eth}};
-map { ${$$hash{iph}}{$_} = '$' } @{$hash->{ip}};
-map { ${$$hash{"$self->{'proto'}h"}}{$_} = '$' } @{$hash->{"$self->{'proto'}"}}; 
-map {  if ($hash->{'ethh'}->{$_} eq '$') {
-                                          if($a) {    
-			                    push @array,$self->{'ethhdr'}->$_()
-					  }
-					  else   {
-			                    $h{$_} = $self->{'ethhdr'}->$_()
-					  }  
-					 }
-} @ethhdr if exists $hash->{'eth'};
+    my $wantarray = wantarray;
+    my %ref = (
+        tcp     => \@Net::RawIP::tcphdr::tcphdr,
+        udp     => \@Net::RawIP::udphdr::udphdr,
+        icmp    => \@Net::RawIP::icmphdr::icmphdr,
+        generic => \@Net::RawIP::generichdr::generichdr,
+    );
+    my @array;
+    my %h;
 
-map {  if ($hash->{'iph'}->{$_} eq '$') {
-                                          if($a) {    
-			                    push @array,$self->{'iphdr'}->$_()
-					  }
-					  else   {
-			                    $h{$_} = $self->{'iphdr'}->$_()
-					  }  
-					 }
-} @iphdr if exists $hash->{'ip'};
+    map { ${$$hash{ethh}}{$_} = '$' } @{$hash->{eth}};
+    map { ${$$hash{iph}}{$_} = '$' } @{$hash->{ip}};
+    map { ${$$hash{"$self->{proto}h"}}{$_} = '$' } @{$hash->{$self->{proto}}}; 
 
-map { if ($hash->{"$self->{'proto'}h"}->{$_} eq '$') {
-                                          if($a) {    
-                                push @array,$self->{"$self->{'proto'}hdr"}->$_()
-					  }
-					  else   {
-			        $h{$_} = $self->{"$self->{'proto'}hdr"}->$_()
-					  }  
-					 }
-} @{$ref{"$self->{'proto'}"}} if exists $hash->{"$self->{'proto'}"};
+    if (exists $hash->{eth}) {
+        foreach (@Net::RawIP::ethhdr::ethhdr) {
+            if (defined $hash->{ethh}->{$_} and $hash->{ethh}->{$_} eq '$') {
+                if ($wantarray) {    
+                    push @array, $self->{ethhdr}->$_()
+                }
+                else {
+                    $h{$_} = $self->{ethhdr}->$_()
+                }  
+            }
+        }
+    }
 
-  if($a){
-         return (@array);
-  }
-  else {
-         return {%h}
-  }
+    if (exists $hash->{ip}) {
+        foreach (@Net::RawIP::iphdr::iphdr) {
+            if (defined $hash->{iph}->{$_} and $hash->{iph}->{$_} eq '$') {
+                if ($wantarray) {    
+                    push @array, $self->{iphdr}->$_()
+                }
+                else {
+                    $h{$_} = $self->{iphdr}->$_()
+                }
+            }  
+        }
+    }
+
+    if (exists $hash->{ $self->{proto} }) {
+        my $proto_h   = "$self->{proto}h";
+        my $proto_hdr = "$self->{proto}hdr";
+        foreach (@{ $ref{$self->{proto}} }) {
+            if (defined $hash->{$proto_h}->{$_} and $hash->{$proto_h}->{$_} eq '$') {
+                if ($wantarray) {    
+                    push @array,$self->{$proto_hdr}->$_()
+                }
+                else {
+                    $h{$_} = $self->{$proto_hdr}->$_()
+                }
+            }  
+        }
+    }
+
+    if ($wantarray) {
+        return (@array);
+    }
+    else {
+        return {%h}
+    }
 }
 
 sub send {
-my ($self,$delay,$times) = @_;
-if(!$times){
-$times = 1;
-}
-$self->{'raw'} = rawsock() unless $self->{'raw'};
-if($self->{'proto'} eq 'icmp' || $self->{'proto'} eq 'generic'){
-$self->{'sock'} = set_sockaddr($self->{'iphdr'}->daddr,0);
-}
-else{
-$self->{'sock'} = set_sockaddr($self->{'iphdr'}->daddr,
-                               $self->{"$self->{'proto'}hdr"}->dest);
-}
-while($times){
-    pkt_send ($self->{raw},$self->{'sock'},$self->{'pack'});
-select(undef,undef,undef,$delay) if $delay;
-$times--
-}
+    my ($self, $delay, $times) = @_;
+    $times ||= 1;
+
+    if (! $self->{raw}) {
+        $self->{raw} = rawsock();
+    }
+    if ($self->{proto} eq 'icmp' || $self->{proto} eq 'generic') {
+        $self->{sock} = set_sockaddr($self->{iphdr}->daddr,0);
+    }
+    else {
+        $self->{sock} = set_sockaddr($self->{iphdr}->daddr,
+                               $self->{"$self->{proto}hdr"}->dest);
+    }
+    for (1..$times) {
+        pkt_send ($self->{raw}, $self->{sock}, $self->{pack});
+        select(undef,undef,undef,$delay) if $delay;
+    }
 } 
 
 sub pcapinit {
-my($self,$device,$filter,$size,$tout) = @_;
-my $promisc = 0x100;
-my ($erbuf,$pcap,$program);
-croak "$erbuf" unless ($pcap = open_live($device,$size,$promisc,$tout,$erbuf));
-croak "compile(): check string with filter" if (compile($pcap,$program,$filter,0,0) < 0);
-setfilter($pcap,$program);
-return $pcap
-} 
+    my ($self, $device, $filter, $size, $tout) = @_;
+    my $promisc = 0x100;
+    my ($erbuf, $pcap, $program);
+
+    $pcap = open_live($device,$size,$promisc,$tout,$erbuf);
+    croak "$erbuf" if (! $pcap);
+    croak "compile(): check string with filter" if (compile($pcap,$program,$filter,0,0) < 0);
+    setfilter($pcap, $program);
+
+    return $pcap
+}
 
 sub pcapinit_offline {
-my($self,$fname) = @_;
-my ($erbuf,$pcap);
-croak $erbuf unless ($pcap = open_offline($fname,$erbuf));
-return $pcap;
+    my($self,$fname) = @_;
+    my ($erbuf,$pcap);
+    $pcap = open_offline($fname, $erbuf);
+    croak $erbuf if (! $pcap);
+
+    return $pcap;
 }
 
 sub rdev {
-my $rdev;
-my $ip = ($_[0] =~ /^-?\d+$/) ? $_[0] : host_to_ip($_[0]);
-my $ipn = unpack("I",pack("N",$ip));
-if(($rdev = ip_rt_dev($ipn)) eq 'proc'){
-  my($dest,$mask);
-  open(ROUTE,"/proc/net/route") || croak "Can't open /proc/net/route: $!";
-  while(<ROUTE>){
-                 next if /Destination/;
-                 ($rdev,$dest,$mask) = (split(/\s+/))[0,1,7];
-                 last unless ($ipn & hex($mask)) ^ hex($dest);
-  }
-  CORE::close(ROUTE);
-  $rdev = 'lo' unless ($ip & 0xFF000000) ^ 0x7f000000; # For Linux 2.2.x 
-}
-  croak "rdev(): Destination unreachable" unless $rdev;
-# The aliasing support
-  $rdev =~ s/([^:]+)(:.+)?/$1/;
-return $rdev;    
+    my $rdev;
+    my $ip = ($_[0] =~ /^-?\d+$/) ? $_[0] : host_to_ip($_[0]);
+    my $ipn = unpack("I",pack("N",$ip));
+    if (($rdev = ip_rt_dev($ipn)) eq 'proc'){
+        my($dest,$mask);
+        open (ROUTE, "/proc/net/route") || croak "Can't open /proc/net/route: $!";
+        while (<ROUTE>) {
+            next if /Destination/;
+            ($rdev,$dest,$mask) = (split(/\s+/))[0,1,7];
+            last unless ($ipn & hex($mask)) ^ hex($dest);
+        }
+        CORE::close(ROUTE);
+        $rdev = 'lo' unless ($ip & 0xFF000000) ^ 0x7f000000; # For Linux 2.2.x 
+    }
+    croak "rdev(): Destination unreachable" unless $rdev;
+    # The aliasing support
+    $rdev =~ s/([^:]+)(:.+)?/$1/;
+    return $rdev;    
 }
 
 sub DESTROY {
-my $self = shift;
-closefd($self->{'raw'}) if exists $self->{'raw'};
-closefd($self->{'tap'}) if exists $self->{'tap'};
+    my $self = shift;
+    closefd($self->{raw}) if exists $self->{raw};
+    closefd($self->{tap}) if exists $self->{tap};
 }
 
 1;
@@ -604,17 +650,25 @@ __END__
 
 Net::RawIP - Perl extension for manipulate raw ip packets with interface to B<libpcap>
 
+=head1 WARNING
+
+This is not an official release.  Sergey Kolychev, the original author of this
+module has not bless this nor have I received maintainership of this module yet. 
+See Changes for what did I change. -- Gabor Szabo
+
 =head1 SYNOPSIS
 
   use Net::RawIP;
-  $a = new Net::RawIP;
-  $a->set({ip => {saddr => 'my.target.lan',daddr => 'my.target.lan'},
-           tcp => {source => 139,dest => 139,psh => 1, syn => 1}});
-  $a->send;
-  $a->ethnew("eth0");
-  $a->ethset(source => 'my.target.lan',dest =>'my.target.lan');	   
-  $a->ethsend;
-  $p = $a->pcapinit("eth0","dst port 21",1500,30);
+  $n = Net::RawIP->new;
+  $n->set({
+            ip  => {saddr => 'my.target.lan',daddr => 'my.target.lan'},
+            tcp => {source => 139,dest => 139,psh => 1, syn => 1},
+         });
+  $n->send;
+  $n->ethnew("eth0");
+  $n->ethset(source => 'my.target.lan',dest =>'my.target.lan');    
+  $n->ethsend;
+  $p = $n->pcapinit("eth0","dst port 21",1500,30);
   $f = dump_open($p,"/my/home/log");
   loop $p,10,\&dump,$f;
 
@@ -699,7 +753,7 @@ Please look at the examples.
 B<C<new>>   ({
               ip       => {IPKEY => IPVALUE,...},
               ARGPROTO => {PROTOKEY => PROTOVALUE,...} 
-	  })	      
+      })          
 
 The B<C<ip>> is the key of the hash which value is a reference of the hash with 
 parameters of the iphdr in the current IP packet.
@@ -722,11 +776,11 @@ You B<HAVE TO> initialize the subclass of the Net::RawIP object before use.
 
 Here is a code for initializing the udp subclass in the Net::RawIP object.
 
-$a = new Net::RawIP({udp =>{}});
+$n = Net::RawIP->new({udp =>{}});
 
 or
 
-$a = new Net::RawIP({ip => { tos => 22 }, udp => { source => 22,dest =>23 } });
+$n = Net::RawIP->new({ip => { tos => 22 }, udp => { source => 22,dest =>23 } });
  
 
 You could B<NOT> change the subclass in the object after.
@@ -805,8 +859,8 @@ Here is a code :
 
   ($tos,$urg,$ack,$psh,$rst,$syn,$fin) = $packet->get({
             ip => [qw(tos)],
-	    tcp => [qw(psh syn urg ack rst fin)]
-	    });
+        tcp => [qw(psh syn urg ack rst fin)]
+        });
 
 The members in the array can be given in any order.
 
@@ -833,7 +887,7 @@ and as 0.25 for sleep to 250 ms or 3.5 to sleep for 3 seconds and 500 ms.
 is a method for some a pcap init. The input parameters are a device,a string with
 a program for a filter,a packet size,a timeout.
 This method will call the function open_live,then compile the filter string by compile(),
-set the filter and returns the pointer (B<pcap_t *>).            	         
+set the filter and returns the pointer (B<pcap_t *>).                        
 
 =item B<pcapinit_offline($fname)>
 
@@ -904,15 +958,15 @@ all types,lengths,datas of an options will be returned.
 E.g. you want to know all the IP options from the current object.
 Here is a code:
 
-@opts = $a->optget(ip => {});
+@opts = $n->optget(ip => {});
 
 E.g. you want to know just the IP options with the type which equal to 131 and 137.
 Here is a code:
 
-($t131,$l131,$d131,$t137,$l137,$d137) = $a->optget(
+($t131,$l131,$d131,$t137,$l137,$d137) = $n->optget(
                                    ip =>{
-				        type =>[(131,137)]
-				        }        );                        
+                        type =>[(131,137)]
+                        }        );                        
 
 =item B<optunset>
 
@@ -923,12 +977,12 @@ The parameters for this method are the B<OPTPROTO>'s.
 E.g. you want to unset an IP options.
 Here is a code:
 
-$a->optunset('ip');
+$n->optunset('ip');
 
 E.g. you want to unset a TCP and an IP options.
 Here is a code:
 
-$a->optunset('ip','tcp');
+$n->optunset('ip','tcp');
 
 =back
 

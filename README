@@ -5,9 +5,15 @@ NOTE: Ethernet related methods currently implemented only on Linux and *BSD!
 Help with port eth.c to other platforms is very appreciated.
 
 You need perl 5.004 or later to use this module.
-You need to have installed libpcap, available from
+You need to have installed libpcap, available from:
 
-ftp://ftp.ee.lbl.gov/libpcap.tar.Z
+TBD
+
+If you are using Ubuntu you can install it by typing:
+
+   sudo apt-get install libpcap0.7-dev
+
+
 
 You install the module by running these commands:
 

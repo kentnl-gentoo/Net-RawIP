@@ -22,6 +22,10 @@ ifaddrlist.h
 ip.h
 rdev.c
 solaris.h
-test.pl
 typemap
 util.c
+
+t/simple.t
+t/memory_leak.t
+t/iflist.t
+META.yml                                 Module meta-data (added by MakeMaker)
