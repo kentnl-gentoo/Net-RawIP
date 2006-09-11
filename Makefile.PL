@@ -67,11 +67,15 @@ print $config{$name}->[2];
 eval $config{$name}->[3];
 
 WriteMakefile(
-    'NAME'         => 'Net::RawIP',
-    'VERSION_FROM' => 'RawIP.pm', 
-    'LIBS'         => ['-lpcap'],   
-    'DEFINE'       => $def,      
-    'INC'          => '',      
-    'OBJECT'       => $obj,
+    NAME           => 'Net::RawIP',
+    VERSION_FROM   => 'RawIP.pm', 
+    LIBS           => ['-lpcap'],   
+    DEFINE         => $def,      
+    INC            => '',      
+    OBJECT         => $obj,
+    PREREQ_PM      => {
+        'List::MoreUtils'  => 0,
+    },
+
 );
 

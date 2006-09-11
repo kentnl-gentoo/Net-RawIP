@@ -28,4 +28,6 @@ util.c
 t/simple.t
 t/memory_leak.t
 t/iflist.t
+t/pod.t
+t/pod-coverage.t
 META.yml                                 Module meta-data (added by MakeMaker)

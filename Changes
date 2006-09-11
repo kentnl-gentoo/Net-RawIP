@@ -1,5 +1,13 @@
 Revision history for Perl extension Net::RawIP.
 
+0.21_02
+       - Cleaning up the C code (indentation)
+       - More tests
+       - Cleaning up the documentation, replacing the bad English of Sergey
+         with the bad English of Gabor.
+       - new() dies if wrong or duplicate protocols given
+         All by Gabor Szabo
+
 0.21_01   Sat Sep  9 23:59:07 IDT 2006
        -  Cleaning up many warnings that were probably due to using gcc 4+
        -  Cleaning up several assignment errors that were probably due to gcc 4+

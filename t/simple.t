@@ -146,3 +146,61 @@ diag "Testing $Net::RawIP::VERSION";
     BEGIN { $tests += 9; }
 }
 
+{
+    my $rawip = Net::RawIP->new({ icmp => {} });
+    isa_ok($rawip, 'Net::RawIP');
+    
+    is($rawip->proto, 'icmp', 'protocol is set to icmp');
+    #diag Dumper $rawip;
+    my @iphdr_result  = (4, 5, 16, 0, 0, 16384, 64, 1, 0, 0, 0);
+    my @icmphdr_result = (0, 0, 0, 0, 0, 0, 0, 0, '');
+
+    isa_ok($rawip->{icmphdr}, 'Net::RawIP::icmphdr'); 
+    isa_ok($rawip->{iphdr},  'Net::RawIP::iphdr'); 
+
+    #diag Dumper $rawip;
+    is_deeply($rawip->{icmphdr}, \@icmphdr_result);
+    is_deeply($rawip->{iphdr},  \@iphdr_result);
+    is_deeply([sort keys %$rawip], [qw(icmphdr iphdr pack proto)]);
+
+    is($warn, '', 'no warnnigs');
+    BEGIN { $tests += 8; }
+}
+
+
+{
+    my $rawip = Net::RawIP->new({ generic => {} });
+    isa_ok($rawip, 'Net::RawIP');
+    
+    is($rawip->proto, 'generic', 'protocol is set to generic');
+    #diag Dumper $rawip;
+    my @iphdr_result  = (4, 5, 16, 0, 0, 16384, 64, 0, 0, 0, 0);
+    isa_ok($rawip->{generichdr}, 'Net::RawIP::generichdr'); 
+    isa_ok($rawip->{iphdr},  'Net::RawIP::iphdr'); 
+
+    #diag Dumper $rawip;
+    is_deeply($rawip->{generichdr}, ['']);
+    is_deeply($rawip->{iphdr},  \@iphdr_result);
+
+    is_deeply([sort keys %$rawip], [qw(generichdr iphdr pack proto)]);
+    BEGIN { $tests += 7; }
+}   
+
+{
+    eval {
+        Net::RawIP->new({ no_such => {} });
+    };
+    like($@, qr{'no_such' is not a valid key});
+
+    eval {
+        Net::RawIP->new({ generic => {}, tcp => {} });
+    };
+    like($@, qr{Duplicate protocols defined: 'tcp' and 'generic'});
+
+    BEGIN { $tests += 2; }
+}
+
+# TODO: pass constructor invalid fields
+# TODO: test the content of the ->{pack} variable
+
+

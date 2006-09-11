@@ -28,7 +28,7 @@ sub get_process_size {
 my $start_size = get_process_size($$);
 diag "Testing memory leak";
 diag "Start size: $start_size";
-my $warn;
+my $warn = '';
 BEGIN {
     $SIG{__WARN__} = sub { $warn = shift };
 }
@@ -40,8 +40,9 @@ BEGIN { $tests += 2; }
 $warn = '';
 diag "Testing Net::RawIP v$Net::RawIP::VERSION";
 
-my $count;
-BEGIN { $count = 10000; }
+# one can run this test giving a number on the command line
+# 10,000 seems to be reasonable
+my $count = shift || 10_000;
 for (1..$count) {
     my $n = Net::RawIP->new({ udp => {} });
     $n->set({
@@ -58,8 +59,20 @@ for (1..$count) {
 }
 my $size_change = get_process_size($$) - $start_size;
 diag "Size change was: $size_change";
-cmp_ok($size_change, '<', 40_000, 'normally it should be 0 but we are satisfied with 40,000 here');
+cmp_ok($size_change, '<', 1_100_000, 
+    'normally it should be 0 but we are satisfied with 1,100,000 here');
 BEGIN { $tests += 1; }
+# Once upon a time there was a memory leak on Solaris created by the above
+# loop.
+#
+# In order to test the fix I created this test.
+# On my development Ubuntu GNU/Linux machine the 
+# starting size was around 7,300,000 bytes
+# while the size change was constantly 1,064,960 
+# no matter if I ran the loop 1000 times or 1,000,000 times 
+# (though the latter took 5 minutes...)
+# I guess this the memory footprint of the external libraries that are loaded
+# during run time and there is no memory leek.
 
 
 

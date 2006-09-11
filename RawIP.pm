@@ -1,37 +1,51 @@
 # Create sub modules 
 package Net::RawIP::iphdr;
+use strict;
+use warnings;
 use Class::Struct qw(struct);
 our @iphdr 
     = qw(version ihl tos tot_len id frag_off ttl protocol check saddr daddr);
 struct ( 'Net::RawIP::iphdr' => [ map { $_ => '$' } @iphdr ] );
 
 package Net::RawIP::tcphdr;
+use strict;
+use warnings;
 use Class::Struct qw(struct);
 our @tcphdr = qw(source dest seq ack_seq doff res1 res2 urg ack psh rst syn
     fin window check urg_ptr data);
 struct ( 'Net::RawIP::tcphdr' => [map { $_ => '$' } @tcphdr ] );
 
 package Net::RawIP::udphdr;
+use strict;
+use warnings;
 use Class::Struct qw(struct);
 our @udphdr = qw(source dest len check data);
 struct ( 'Net::RawIP::udphdr' => [map { $_ => '$' } @udphdr ] );
 
 package Net::RawIP::icmphdr;
+use strict;
+use warnings;
 use Class::Struct qw(struct);
 our @icmphdr = qw(type code check gateway id sequence unused mtu data);
 struct ( 'Net::RawIP::icmphdr' => [map { $_ => '$' } @icmphdr ] );
 
 package Net::RawIP::generichdr;
+use strict;
+use warnings;
 use Class::Struct qw(struct);
 our @generichdr = qw(data);
 struct ( 'Net::RawIP::generichdr' => [map { $_ => '$' } @generichdr ] );
 
 package Net::RawIP::opt;
+use strict;
+use warnings;
 use Class::Struct qw(struct);
 my @opt = qw(type len data);
 struct ( 'Net::RawIP::opt' => [map { $_ => '@' } @opt ] );
 
 package Net::RawIP::ethhdr;
+use strict;
+use warnings;
 use Class::Struct qw(struct);
 our @ethhdr = qw(dest source proto);
 struct ( 'Net::RawIP::ethhdr' => [map { $_ => '$' } @ethhdr ] );
@@ -67,7 +81,8 @@ timem linkoffset ifaddrlist rdev)
                             ]
 );
 
-$VERSION = '0.21_01';
+$VERSION = '0.21_02';
+use List::MoreUtils qw(none);
 
 # The number of members in the sub modules
 my %n = (
@@ -76,6 +91,7 @@ my %n = (
     icmp    => 9,
     generic => 1,
 ); 
+my @valid_protocols = qw(tcp udp icmp generic);
 
 sub AUTOLOAD {
     my $constname;
@@ -97,6 +113,8 @@ sub AUTOLOAD {
 bootstrap Net::RawIP $VERSION;
 
 # Warn if called from non-root accounts
+# TODO: move this warning only when calling functions that really need root
+# priviliges
 carp "Must have EUID == 0 to use Net::RawIP" if $>;
 
 
@@ -105,24 +123,32 @@ sub new {
     my ($proto, $ref) = @_;
     my $class = ref($proto) || $proto;
     my $self = {};
-    bless $self,$class;
-    # The sub protocol determination (tcp by default) 
+    bless $self, $class;
+
+    # Determine which protocol (tcp by default) 
+    $ref ||= {};
+    foreach my $k (keys %$ref) {
+        croak "'$k' is not a valid key\n" 
+            if none {$_ eq $k} (@valid_protocols, 'ip');
+    }
     $self->proto($ref);
-    # The values by default
+
     $self->_unpack($ref);;
     return $self
 }
 
 sub proto {
     my ($class, $args) = @_;
-    my @proto = qw(tcp udp icmp generic);
     if (not $class->{proto}) {
-        my $proto = 'tcp';
-        foreach (@proto) {
-            if (exists $args->{$_}) {
-                $proto = $_;
+        my $proto;
+        foreach my $p (@valid_protocols) {
+            if (exists $args->{$p}) {
+                croak "Duplicate protocols defined: '$proto' and '$p'\n"
+                    if $proto;
+                $proto = $p;
             }
         }
+        $proto ||= 'tcp';
         $class->{proto} = $proto;
     }
     return $class->{proto}
@@ -310,7 +336,7 @@ sub ethsend {
             $self->{ethdev},
             $self->{ethpack} . $self->{pack},
             1);
-        select(undef,undef,undef,$delay) if $delay;
+        sleep $delay if $delay;
     }
 }
 
@@ -325,7 +351,7 @@ sub send_eth_frame {
             $self->{ethdev},
             substr($self->{ethpack}, 0, 12) . $frame,
             0);
-        select(undef,undef,undef,$delay) if $delay;
+        sleep $delay if $delay;
     }
 } 
 
@@ -375,13 +401,14 @@ sub s2i {
 sub _pack {
     my $self = shift;
     if (@_) {
-        my @array = (@{$self->{iphdr}}, @{$self->{"$self->{proto}hdr"}});
         # A low level *_pkt_creat() functions take reference of array 
         # with all of fields of the packet and return properly packed scalar  
         my $function = $self->{proto} . '_pkt_creat';
+        ## no critic (ProhibitNoStrict)
         no strict 'refs';
         # not clear to me what is undef here but it trips one of the tests
         no warnings; 
+        my @array = (@{$self->{iphdr}}, @{$self->{"$self->{proto}hdr"}});
         $self->{pack} = $function->(\@array);
     }
 
@@ -395,7 +422,7 @@ sub packet {
 
 sub set {
     my ($self, $hash) = @_;
-    # For handle C union in the ICMP header
+    # To handle C union in the ICMP header
     my %un = (
             id     => 'sequence',
             unused => 'mtu',
@@ -417,21 +444,21 @@ sub set {
     }
 
     if (exists $hash->{icmp}) {
-        foreach (keys %{$hash->{icmp}}) {
-            $self->{icmphdr}->$_(${$hash->{icmp}}{$_});
-            if (!/gateway/) {
-                if ($un{$_}) { 
-                    my $meth = $un{$_};
+        foreach my $k (keys %{ $hash->{icmp} }) {
+            $self->{icmphdr}->$k( $hash->{icmp}->{$_} );
+            if ($k !~ /gateway/) {
+                if ($un{$k}) { 
+                    my $meth = $un{$k};
                     $self->{icmphdr}->gateway(s2i(
-                                    ($self->{icmphdr}->$_()),
+                                    ($self->{icmphdr}->$k()),
                                     ($self->{icmphdr}->$meth())
                                     ));
                 }       
-                elsif ($revun{$_}) {
-                    my $meth = $revun{$_};
+                elsif ($revun{$k}) {
+                    my $meth = $revun{$k};
                     $self->{icmphdr}->gateway(s2i(
                                         ($self->{icmphdr}->$meth()),
-                                        ($self->{icmphdr}->$_())
+                                        ($self->{icmphdr}->$k())
                                         ));
                 }
             }
@@ -440,8 +467,8 @@ sub set {
 
     my $saddr = $self->{iphdr}->saddr;
     my $daddr = $self->{iphdr}->daddr;
-    $self->{iphdr}->saddr(host_to_ip($saddr)) if($saddr !~ /^-?\d*$/);
-    $self->{iphdr}->daddr(host_to_ip($daddr)) if($daddr !~ /^-?\d*$/);
+    $self->{iphdr}->saddr(host_to_ip($saddr)) if ($saddr !~ /^-?\d*$/);
+    $self->{iphdr}->daddr(host_to_ip($daddr)) if ($daddr !~ /^-?\d*$/);
     return $self->_pack(1);
 }
 
@@ -458,6 +485,7 @@ sub bset {
     # The low level *_pkt_parse() functions take packet and return reference of
     # of the array with fields from this packet
     my $function = $self->{proto} . '_pkt_parse';
+    ## no critic (ProhibitNoStrict)
     no strict 'refs';
     my $array = $function->($hash);
     use strict;
@@ -590,7 +618,7 @@ sub send {
     }
     for (1..$times) {
         pkt_send ($self->{raw}, $self->{sock}, $self->{pack});
-        select(undef,undef,undef,$delay) if $delay;
+        sleep $delay if $delay;
     }
 } 
 
@@ -622,13 +650,13 @@ sub rdev {
     my $ipn = unpack("I",pack("N",$ip));
     if (($rdev = ip_rt_dev($ipn)) eq 'proc'){
         my($dest,$mask);
-        open (ROUTE, "/proc/net/route") || croak "Can't open /proc/net/route: $!";
-        while (<ROUTE>) {
+        open (my $route, '<', '/proc/net/route') || croak "Can't open /proc/net/route: $!";
+        while (<$route>) {
             next if /Destination/;
             ($rdev,$dest,$mask) = (split(/\s+/))[0,1,7];
             last unless ($ipn & hex($mask)) ^ hex($dest);
         }
-        CORE::close(ROUTE);
+        CORE::close($route);
         $rdev = 'lo' unless ($ip & 0xFF000000) ^ 0x7f000000; # For Linux 2.2.x 
     }
     croak "rdev(): Destination unreachable" unless $rdev;
@@ -661,22 +689,30 @@ See Changes for what did I change. -- Gabor Szabo
   use Net::RawIP;
   $n = Net::RawIP->new;
   $n->set({
-            ip  => {saddr => 'my.target.lan',daddr => 'my.target.lan'},
-            tcp => {source => 139,dest => 139,psh => 1, syn => 1},
+            ip  => {
+                    saddr => 'my.target.lan',
+                    daddr => 'my.target.lan',
+                    },
+            tcp => {
+                    source => 139,
+                    dest   => 139,
+                    psh    => 1,
+                    syn    => 1,
+                    },
          });
   $n->send;
   $n->ethnew("eth0");
-  $n->ethset(source => 'my.target.lan',dest =>'my.target.lan');    
+  $n->ethset(source => 'my.target.lan', dest =>'my.target.lan');    
   $n->ethsend;
-  $p = $n->pcapinit("eth0","dst port 21",1500,30);
-  $f = dump_open($p,"/my/home/log");
-  loop $p,10,\&dump,$f;
+  $p = $n->pcapinit("eth0", "dst port 21", 1500, 30);
+  $f = dump_open($p, "/my/home/log");
+  loop($p, 10, \&dump, $f);
 
 =head1 DESCRIPTION
 
 This package provides a class object which can be used for
-creating, manipulating and sending a raw ip packets with
-optional feature for manipulating ethernet headers.
+creating, manipulating and sending raw ip packets with
+optional features for manipulating ethernet headers.
 
 B<NOTE:> Ethernet related methods are implemented on Linux and *BSD only
 
@@ -715,126 +751,172 @@ close
 dump_close
 timem
 linkoffset
+ifaddrlist
+rdev
 
-By default exported functions are the B<loop>,B<dispatch>,B<dump_open>,B<dump>,
-B<open_live>,B<timem>,B<linkoffset>,B<ifaddrlist>,B<rdev>. You have to use the export tag 
-B<pcap> for export all of the pcap functions.
+By default exported functions are the B<loop>, B<dispatch>, B<dump_open>, B<dump>,
+B<open_live>, B<timem>, B<linkoffset>, B<ifaddrlist>, B<rdev>. 
+You have to use the export tag B<pcap> for export all of the pcap functions.
 Please read the docs for the libpcap and look at L<Net::RawIP::libpcap(3pm)>.
-The exported functions the B<loop> and the B<dispatch> can run a perl code refs
-as a callbacks for packet analyzing and printing.
-If B<dump_open> opens and returns a valid file descriptor,this descriptor can be 
-used in the perl callback as a perl filehandle.Also fourth parameter for loop and 
-dispatch can be an array or a hash reference and it can be unreferensed in a perl 
-callback. The function B<next> returns a string scalar (next packet).Function 
-B<timem()> returns a string scalar which looking like B<sec>.B<microsec>, 
-where the B<sec> and the B<microsec> are the values which returned by gettimeofday(3) ,
-if B<microsec> is less than 100000 then zeros will be added to the left side of
-B<microsec> for adjusting to six digits. 
-The function which called B<linkoffset> returns a number of the bytes
-in the link protocol header e.g. 14 for a Ethernet or 4 for a Point-to-Point
-protocol.This function has one input parameter (pcap_t* which is returned
-by open_live). 
 
-The B<ifaddrlist> function returns a hash reference,in this hash keys are 
-all running network devices,values are ip addresses of those devices 
-in an internet address format.
-
-The B<rdev> function returns a name of the outgoing device for given 
-destination address.
-It has one input parameter (destination address in an internet address
-or a domain name or a host byteorder int formats).
-
- 
-
-Please look at the examples.
-
-=head1 CONSTRUCTOR
-
-B<C<new>>   ({
-              ip       => {IPKEY => IPVALUE,...},
-              ARGPROTO => {PROTOKEY => PROTOVALUE,...} 
-      })          
-
-The B<C<ip>> is the key of the hash which value is a reference of the hash with 
-parameters of the iphdr in the current IP packet.
-
-The B<C<IPKEY>> is one of they (B<version> B<ihl> B<tos> B<tot_len> B<id>
-B<frag_off> B<ttl> B<protocol> B<check> B<saddr> B<daddr>).
-You can to specify all parameters,even B<check>.If you do not specify parameter,
-then value by default will be used.
-Of course the checksum will be calculated if you do not specify non-zero value
-for it.
-The values of the B<saddr> and the B<daddr> can be like www.oracle.com or
-205.227.44.16, even they can be an integer  if you know what is 205.227.44.16 
-as an unsigned int in the host format ;). 
-
-The B<C<ARGPROTO>> is one of they (B<tcp> B<udp> B<icmp> B<generic>),
-this key has used for B<DEFINE> subclass of the Net::RawIP. B<If you not
-specify a ARGPROTO then by default value is the tcp>. 
-
-You B<HAVE TO> initialize the subclass of the Net::RawIP object before use.
-
-Here is a code for initializing the udp subclass in the Net::RawIP object.
-
-$n = Net::RawIP->new({udp =>{}});
-
-or
-
-$n = Net::RawIP->new({ip => { tos => 22 }, udp => { source => 22,dest =>23 } });
- 
-
-You could B<NOT> change the subclass in the object after.
-
-The default values of the B<ip> hash are 
-(4,5,16,0,0,0x4000,64,6,0,0,0) for the B<tcp> or 
-(4,5,16,0,0,0x4000,64,17,0,0,0) for the B<udp> or 
-(4,5,16,0,0,0x4000,64,1,0,0,0) for the B<icmp> or 
-(4,5,16,0,0,0x4000,64,0,0,0,0) for the B<generic>.
-
-The B<C<PROTOKEY>> is one of (B<source> B<dest> B<seq> B<ack_seq> B<doff> 
-B<res1> B<res2> B<urg> B<ack> B<psh> B<rst> B<syn> B<fin> B<window> B<check>
-B<urg_ptr> B<data>) for the tcp or 
-
-one of (B<type> B<code> B<check> B<gateway> B<id> B<sequence> B<unused> B<mtu> B<data>)
-for the icmp or 
-
-one of (B<source> B<dest> B<len> B<check> B<data>) for the udp or just 
-
-B<data> for the generic.
-
-You have to specify just B<gateway> - (int) or (B<id> and B<sequence>)
-- (short and short) or (B<mtu> and B<unused>) - (short and short)
-for the icmp because in the real icmp packet it's the C union.
-
-The default values are (0,0,0,0,5,0,0,0,0,0,0,0,0,0xffff,0,0,'') for the tcp and
-                  (0,0,0,0,0,0,0,0,'') for the icmp and 
-                  (0,0,0,0,'') for the udp and 
-                  ('') for the generic.
-
-The valid values for B<urg> B<ack> B<psh> B<rst> B<syn> B<fin> are 0 or 1.
-The value of B<data> is a string. Length of the result packet will be calculated
-if you do not specify non-zero value for B<tot_len>. 
+Please look at the examples in the examples/ folder of the distribution.
 
 =head1 METHODS
 
 =over 3
 
-=item B<proto>
+=item new
 
-returns the name of the subclass current object e.g. B<tcp>.
+    Net::RawIP->new({
+              ARGPROTO => {PROTOKEY => PROTOVALUE,...} 
+              ip       => {IPKEY => IPVALUE,...},
+      })          
+
+B<ARGPROTO> is one of (B<tcp>, B<udp>, B<icmp>, B<generic>) defining the
+protcol of the current packet. Defaults to B<tcp>.
+
+You can B<NOT> change protocol in the object after its creation.
+
+The possible values of B<PROTOKEY> depend on the value of ARGPROTO
+
+If ARGPROTO is <tcp> PROTOKEY can be one of 
+(B<source>, B<dest>, B<seq>, B<ack_seq>, B<doff>, B<res1>, B<res2>, 
+B<urg>, B<ack>, B<psh>, B<rst>, B<syn>, B<fin>, B<window>, B<check>,
+B<urg_ptr>, B<data>).
+
+If ARGPROTO is B<icmp> PROTOKEY can be one of
+(B<type>, B<code>, B<check>, B<gateway>, B<id>, B<sequence>, B<unused>, 
+B<mtu>, B<data>).
+
+If ARGPROTO is B<udp> PROTOKEY can be one of 
+(B<source>, B<dest>, B<len>, B<check>, B<data>)
+
+If ARGPROTO is B<generic> PROTOKEY can be B<data> only.
+
+
+As the real icmp packet is a C union one can specify specify only one 
+of the following set of values.
+
+=over 4
+
+=item B<gateway> - (int)
+
+=item (B<id> and B<sequence>) - (short and short)
+
+=item (B<mtu> and B<unused>) - (short and short)
+
+=back
+
+
+The default values are 
+
+(0,0,0,0,5,0,0,0,0,0,0,0,0,0xffff,0,0,'') for tcp
+
+(0,0,0,0,0,0,0,0,'') for icmp
+
+(0,0,0,0,'') for udp
+
+('') for generic
+
+The valid values for B<urg> B<ack> B<psh> B<rst> B<syn> B<fin> are 0 or 1.
+The value of B<data> is a string. Length of the result packet will be calculated
+if you do not specify non-zero value for B<tot_len>. 
+
+
+The value of B<ip> is a hash defining the parameters of the IP header
+(B<iphdr>) in the current IP packet.
+
+B<IPKEY> is one of (B<version>, B<ihl>, B<tos>, B<tot_len>, B<id>,
+B<frag_off>, B<ttl>, B<protocol>, B<check>, B<saddr>, B<daddr>).
+You can to specify any and all of the above parameters.
+If B<check> is not given checksum will be calculated automatically.
+
+The values of the B<saddr> and the B<daddr> can be hostname
+(e.g. www.oracle.com ) or IP address (205.227.44.16),
+and even the integer value if you happen to know what is 205.227.44.16 
+as an unsigned int in the host format ;). 
+
+Examples:
+
+    my $rawip = Net::RawIP->new({udp =>{}});
+
+or
+
+    my $rawip = Net::RawIP->new({ip => { tos => 22 }, udp => { source => 22,dest =>23 } });
+
+
+The default values of the B<ip> hash are 
+
+(4,5,16,0,0,0x4000,64,6,0,0,0) for B<tcp>
+
+(4,5,16,0,0,0x4000,64,17,0,0,0) for B<udp>
+
+(4,5,16,0,0,0x4000,64,1,0,0,0) for B<icmp>
+
+(4,5,16,0,0,0x4000,64,0,0,0,0) for B<generic>
+
+
+=item dump_open
+
+If B<dump_open> opens and returns a valid file descriptor, this descriptor 
+can be used in the perl callback as a perl filehandle. 
+
+=item loop
+
+=item dispatch
+
+B<loop> and B<dispatch> can run a perl code refs as a callbacks for packet 
+analyzing and printing.
+the fourth parameter for B<loop> and B<dispatch> can be an array or a hash 
+reference and it can be unreferensed in a perl callback. 
+
+=item next
+
+B<next> returns a string (next packet).
+
+=item timem
+
+B<timem()> returns a string that looks like B<sec>.B<microsec>, 
+where the B<sec> and the B<microsec> are the values returned by
+gettimeofday(3).
+If B<microsec> is less than 100000 then zeros will be added to the 
+left side of B<microsec> for adjusting to six digits.
+
+=item linkoffset
+
+The function which called B<linkoffset> returns a number of the bytes
+in the link protocol header e.g. 14 for a Ethernet or 4 for a Point-to-Point
+protocol. This function has one input parameter (pcap_t*) that is returned
+by open_live.
+
+=item ifaddrlist
+
+B<ifaddrlist> returns a hash reference. In this hash keys are 
+the running network devices, values are ip addresses of those devices 
+in an internet address format.
+
+=item rdev
+
+B<rdev> returns a name of the outgoing device for given destination address.
+It has one input parameter (destination address in an internet address
+or a domain name or a host byteorder int formats).
+
+=item proto
+
+Returns the name of the subclass current object e.g. B<tcp>.
 No input parameters.
 
-=item B<packet> 
+=item packet
 
 returns a scalar which contain the packed ip packet of the current object.
 No input parameters.
 
-=item B<set> 
+=item set
 
 is a method for set the parameters to the current object. The given parameters
 must look like the parameters for the constructor.
 
-=item B<bset($packet,$eth)>
+=item bset($packet,$eth)
 
 is a method for set the parameters for the current object.
 B<$packet> is a scalar which contain binary structure (an ip or an eth packet).
@@ -842,7 +924,7 @@ This scalar must match with the subclass of the current object.
 If B<$eth> is given and it have a non-zero value then assumed that packet is a
 ethernet packet,otherwise it is a ip packet. 
 
-=item B<get> 
+=item get
 
 is a method for get the parameters from the current object. This method returns
 the array which will be filled with an asked parameters in order as they have ordered in
@@ -868,7 +950,7 @@ For get the ethernet parameters you have to use the key B<eth> and the
 values of the array (B<dest>,B<source>,B<proto>). The values of the B<dest> and 
 the B<source> will look like the output of the ifconfig(8) e.g. 00:00:E8:43:0B:2A. 
 
-=item B<send($delay,$times)>
+=item send($delay,$times)
 
 is a method which has used for send raw ip packet.
 The input parameters are the delay seconds and the times for repeating send.
@@ -882,14 +964,14 @@ $packet->send(1,10);
 The delay could be specified not only as integer but 
 and as 0.25 for sleep to 250 ms or 3.5 to sleep for 3 seconds and 500 ms.
 
-=item B<pcapinit($device,$filter,$psize,$timeout)>
+=item pcapinit($device,$filter,$psize,$timeout)
 
 is a method for some a pcap init. The input parameters are a device,a string with
 a program for a filter,a packet size,a timeout.
 This method will call the function open_live,then compile the filter string by compile(),
 set the filter and returns the pointer (B<pcap_t *>).                        
 
-=item B<pcapinit_offline($fname)>
+=item pcapinit_offline($fname)
 
 is a method for an offline pcap init.The input parameter is a name of the file
 which contains raw output of the libpcap dump function.
@@ -914,25 +996,25 @@ the B<$device>.
 B<NOTE:> For use methods which are related to the ethernet you have to before initialize
 ethernet subclass by B<ethnew>. 
 
-=item B<ethset>
+=item ethset
 
 is a method for set an ethernet parameters in the current object.
 The given parameters must look like parameters for the B<ethnew> without
 a B<$device>.
 
-=item B<ethsend>
+=item ethsend
 
 is a method for send an ethernet frame.
 The given parameters must look like a parameters for the B<send>.
 
-=item B<send_eth_frame>($frame,$times,$delay)
+=item send_eth_frame($frame,$times,$delay)
 
 is a method for send any ethernet frame which you may construct by
 hands.B<$frame> is a packed ethernet frame exept destination and
 source fields(these fields can be setting by B<ethset> or B<ethnew>).
 Another parameters must look like the parameters for the B<send>. 
 
-=item B<optset>(OPTPROTO => { type => [...],data => [...] },...)
+=item optset(OPTPROTO => { type => [...],data => [...] },...)
 
 is a method for set an IP and a TCP options.
 The parameters for the optset must be given as a key-value pairs.  
