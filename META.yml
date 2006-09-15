@@ -1,8 +1,8 @@
 # http://module-build.sourceforge.net/META-spec.html
 #XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
 name:         Net-RawIP
-version:      0.21_02
-version_from: RawIP.pm
+version:      0.21_03
+version_from: lib/Net/RawIP.pm
 installdirs:  site
 requires:
     List::MoreUtils:               0

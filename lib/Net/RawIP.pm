@@ -81,7 +81,7 @@ timem linkoffset ifaddrlist rdev)
                             ]
 );
 
-$VERSION = '0.21_02';
+$VERSION = '0.21_03';
 use List::MoreUtils qw(none);
 
 # The number of members in the sub modules
@@ -678,12 +678,6 @@ __END__
 
 Net::RawIP - Perl extension for manipulate raw ip packets with interface to B<libpcap>
 
-=head1 WARNING
-
-This is not an official release.  Sergey Kolychev, the original author of this
-module has not bless this nor have I received maintainership of this module yet. 
-See Changes for what did I change. -- Gabor Szabo
-
 =head1 SYNOPSIS
 
   use Net::RawIP;
@@ -1072,16 +1066,17 @@ $n->optunset('ip','tcp');
 
 Sergey Kolychev <ksv@al.lg.ua>
 
+Current Maintainer: Gabor Szabo <gabor@pti.co.il>
+
 =head1 COPYRIGHT
 
-Copyright (c) 1998,1999 Sergey Kolychev. All rights reserved. This program is free
+Copyright (c) 1998-2006 Sergey Kolychev. All rights reserved. This program is free
 software; you can redistribute it and/or modify it under the same terms
 as Perl itself.
 
 =head1 SEE ALSO
 
 perl(1),Net::RawIP::libpcap(3pm),tcpdump(1),RFC 791-793,RFC 768.
-
 
 =cut
 

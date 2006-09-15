@@ -66,9 +66,12 @@ my $obj = $config{$name}->[1];
 print $config{$name}->[2];
 eval $config{$name}->[3];
 
+locate_pcap();
+
+
 WriteMakefile(
     NAME           => 'Net::RawIP',
-    VERSION_FROM   => 'RawIP.pm', 
+    VERSION_FROM   => 'lib/Net/RawIP.pm', 
     LIBS           => ['-lpcap'],   
     DEFINE         => $def,      
     INC            => '',      
@@ -76,6 +79,45 @@ WriteMakefile(
     PREREQ_PM      => {
         'List::MoreUtils'  => 0,
     },
-
 );
+
+
+# on Ubuntu file locations:
+# /usr/lib/libpcap.so.0.8
+# /usr/lib/libpcap.so.0.9.4
+# /usr/lib/libpcap.so.0.7.2
+# /usr/lib/libpcap.so.0.7
+# /usr/lib/libpcap.a
+# /usr/lib/libpcap.so
+
+# /usr/include/pcap.h
+sub locate_pcap {
+    my $header = '/usr/include/pcap.h';
+
+    if (! -e $header) {
+        print <<'END_REPORT';
+Could not find libpcap, see the README file how to install it.
+
+If you do have libpcap installed, please let me know the
+locations of the pcap.h file and what operating system are you using
+so I can include it in the next release
+
+END_REPORT
+        die "Could not find pcap.h. Makefile.PL was not created.\n";
+    }
+
+    open my $fh, '<', $header or die "Could not open $header for reading: $!";
+    while (my $line = <$fh>) {
+        if ($line =~ /PCAP_VERSION/) {
+            print $line;
+        }
+    }
+
+
+    print "The following libpcap.so files were found:\n\n";
+    my @so_files = glob "/usr/lib/libpcap.so*";
+    die "No libpcap.so file found. Makefile.PL was not created.\n"
+        if not @so_files;
+    print map {"$_\n"} @so_files;
+}
 

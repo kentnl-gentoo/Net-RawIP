@@ -25,9 +25,6 @@ sub get_process_size {
     return;
 }
 
-my $start_size = get_process_size($$);
-diag "Testing memory leak";
-diag "Start size: $start_size";
 my $warn = '';
 BEGIN {
     $SIG{__WARN__} = sub { $warn = shift };
@@ -43,7 +40,16 @@ diag "Testing Net::RawIP v$Net::RawIP::VERSION";
 # one can run this test giving a number on the command line
 # 10,000 seems to be reasonable
 my $count = shift || 10_000;
-for (1..$count) {
+do_something();
+
+my $start_size = get_process_size($$);
+diag "Testing memory leak, running $count times";
+diag "Start size: $start_size";
+
+for (2..$count) {
+    do_something();
+}
+sub do_something {
     my $n = Net::RawIP->new({ udp => {} });
     $n->set({
                 ip => {
@@ -59,8 +65,8 @@ for (1..$count) {
 }
 my $size_change = get_process_size($$) - $start_size;
 diag "Size change was: $size_change";
-cmp_ok($size_change, '<', 1_100_000, 
-    'normally it should be 0 but we are satisfied with 1,100,000 here');
+cmp_ok($size_change, '<', 200_000, 
+    'normally it should be 0 but we are satisfied with 200,000 here, see commnts in test file');
 BEGIN { $tests += 1; }
 # Once upon a time there was a memory leak on Solaris created by the above
 # loop.
@@ -71,9 +77,18 @@ BEGIN { $tests += 1; }
 # while the size change was constantly 1,064,960 
 # no matter if I ran the loop 1000 times or 1,000,000 times 
 # (though the latter took 5 minutes...)
+# On another Linux machine (same OS, different HW) the change was 1,167,360
+# On a Sun Solaris it was 1,220,608 (for 100, 1000, 10,000 and 100,000)
 # I guess this the memory footprint of the external libraries that are loaded
 # during run time and there is no memory leek.
 
+# In order to reduce the external libraries issue I have changed the test.
+# The first memory measurement is now done after calling the loop once
+# This way the difference was only 122,880 on the Linux machine.
+# I still cannot explain this change
+
+# If you want, you can run the same test with different nuber of times:
+# perl -Iblib/lib -Iblib/arch t/memory_leak.t 1000000
 
 
 

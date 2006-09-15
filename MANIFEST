@@ -1,12 +1,24 @@
 Changes
 MANIFEST
+MANIFEST.SKIP
 Makefile.PL
 README
 README.Devel
-RawIP.pm
+META.yml
+
+lib/Net/RawIP.pm
 RawIP.xs
 RawIP/libpcap.pod
 eth.c
+ifaddrlist.c
+ifaddrlist.h
+ip.h
+rdev.c
+solaris.h
+util.c
+typemap
+
+
 examples/DoS_linux.2.2.7-9
 examples/iflist
 examples/ip_rt_dev
@@ -17,17 +29,9 @@ examples/oshare
 examples/ping
 examples/traceroute
 examples/watch
-ifaddrlist.c
-ifaddrlist.h
-ip.h
-rdev.c
-solaris.h
-typemap
-util.c
 
 t/simple.t
 t/memory_leak.t
 t/iflist.t
 t/pod.t
 t/pod-coverage.t
-META.yml                                 Module meta-data (added by MakeMaker)
