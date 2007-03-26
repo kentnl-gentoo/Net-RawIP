@@ -6,6 +6,7 @@ use Test::More;
 my $tests;
 
 use Data::Dumper qw(Dumper);
+use English qw( -no_match_vars );
 eval {
     require Proc::ProcessTable;
 };
@@ -25,14 +26,22 @@ sub get_process_size {
     return;
 }
 
-my $warn = '';
+my $warn;
 BEGIN {
     $SIG{__WARN__} = sub { $warn = shift };
 }
 
 use_ok 'Net::RawIP';
-like($warn, qr{Must have EUID == 0 to use Net::RawIP}, 'warning at load time');
-BEGIN { $tests += 2; }
+BEGIN { $tests += 1; }
+{
+    if ($EUID) {
+        like $warn, qr/Must have EUID == 0/, "root warning seen";
+    } else {
+        ok(not(defined $warn), "no root warning");
+    }
+    BEGIN { $tests += 1; }
+}
+$SIG{__WARN__} = 'DEFAULT';
 
 $warn = '';
 diag "Testing Net::RawIP v$Net::RawIP::VERSION";

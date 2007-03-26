@@ -13,6 +13,10 @@ If you are using Ubuntu you can install it by typing:
 
    sudo apt-get install libpcap0.7-dev
 
+or
+
+   sudo apt-get install libpcap0.8-dev
+
 
 
 You install the module by running these commands:
@@ -31,6 +35,11 @@ Kolychev unless otherwise specified. All rights reserved.
 
 This library is free software; you can redistribute it and/or modify it under 
 the same terms as Perl itself.
+
+One can install a development versions using CPAN.pm:
+
+cpan> install S/SZ/SZABGAB/Net-RawIP-0.21_03.tar.gz
+
 
 
 

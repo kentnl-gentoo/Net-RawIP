@@ -1,50 +1,78 @@
 #!/usr/bin/perl
+use strict;
+use warnings;
 # Simple script for educational purposes
 # It prints to STDOUT flags tcp packets from ftp server and client
 
 use Net::RawIP; 
+use Getopt::Long qw(GetOptions);
 require 'getopts.pl';
 
-Getopts('i:d:n:');
-die "Usage $0 -i <ftp server> -d <eth device> -n <number packet for receive>"
-unless ($opt_d && $opt_d && $opt_n);
+
+my $device       = 'lo';
+my $port         = 21;
+my $packet_size  = 1500;
+my $timeout      = 500;
+my $count        = 20;
+my $host         = 'localhost';
+
+GetOptions(
+    'host=s'   => \$host,
+    'device=s' => \$device,
+    'number=s' => \$count,
+    'port=s'   => \$port,
+) or usage();
+
+usage() if (not ($host and $port and $device and $count));
+
+print "Configuration: host: $host:$port on device $device for $count times\n";
 
 print "Now please login to your ftp server\n";
 
-@flags = qw/URG ACK PSH RST SYN FIN/; 
-$filter = "dst host $opt_i and dst port 21";
-$filter1 = "src host $opt_i and src port 21";
-$psize = 1500;
-$device = $opt_d;
-$timeout = 500;
+my @flags   = qw/URG ACK PSH RST SYN FIN/; 
+my $filter  = "dst host $host and dst port $port";
+my $filter1 = "src host $host and src port $port";
 
-if(fork()){
-$a = new Net::RawIP;
-my $pcap = $a->pcapinit($device,$filter,$psize,$timeout);
-loop $pcap,$opt_n,\&cl,\@a;
-          }
-	  else {
-$b = new Net::RawIP;
-my $pcap = $b->pcapinit($device,$filter1,$psize,$timeout);
-loop $pcap,$opt_n,\&sv,\@a;
-               }
+my $parent;
+my $child;
+
+my $pid = fork();
+if ($pid) { # parent
+    $parent = Net::RawIP->new;
+    my $pcap = $parent->pcapinit($device, $filter, $packet_size, $timeout);
+    my @a;
+    #loop $pcap, $count, \&cl, \@a;
+sleep 3;
+} elsif (defined $pid) { # child
+    #$child = Net::RawIP->new;
+    #my @a;
+    #my $pcap = $child->pcapinit($device, $filter1, $packet_size, $timeout);
+    #loop $pcap, $count, \&sv, \@a;
+} else {
+    die "System error. Could not fork\n";
+}
 
 sub cl {
-$a->bset(substr( $_[2],14));
-my @fl = $a->get({tcp=>
+    $parent->bset(substr( $_[2],14));
+    my @fl = $parent->get({tcp=>
                     [qw(psh syn fin rst urg ack)]
 	       });
-print "Client -> ";
-map { print "$flags[$_] "  if $fl[$_] } (0..5);
-print "\n"
+    print "Client -> ";
+    map { print "$flags[$_] "  if $fl[$_] } (0..5);
+    print "\n"
 }
 
 sub sv {
-$b->bset(substr( $_[2],14));
-my @fl = $b->get({tcp=>
+    $child->bset(substr( $_[2],14));
+    my @fl = $child->get({tcp=>
                     [qw(psh syn fin rst urg ack)]
 	       });
-print "Server -> ";
-map { print "$flags[$_] "  if $fl[$_] } (0..5);
-print "\n"; 
+    print "Server -> ";
+    map { print "$flags[$_] "  if $fl[$_] } (0..5);
+    print "\n"; 
 }
+
+sub usage {
+    die "Usage $0 --host <ftp server> --device <eth device> --number <number packet for receive>"
+}
+

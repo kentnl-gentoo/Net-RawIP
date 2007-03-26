@@ -59,6 +59,8 @@ use Carp;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $AUTOLOAD);
 use subs qw(timem ifaddrlist);
 
+use English qw( -no_match_vars );
+
 require Exporter;
 require DynaLoader;
 require AutoLoader;
@@ -81,7 +83,7 @@ timem linkoffset ifaddrlist rdev)
                             ]
 );
 
-$VERSION = '0.21_03';
+$VERSION = '0.21';
 use List::MoreUtils qw(none);
 
 # The number of members in the sub modules
@@ -115,7 +117,7 @@ bootstrap Net::RawIP $VERSION;
 # Warn if called from non-root accounts
 # TODO: move this warning only when calling functions that really need root
 # priviliges
-carp "Must have EUID == 0 to use Net::RawIP" if $>;
+carp "Must have EUID == 0 to use Net::RawIP, currently you are seen with EUID=$EUID" if $EUID;
 
 
 # The constructor
@@ -445,7 +447,7 @@ sub set {
 
     if (exists $hash->{icmp}) {
         foreach my $k (keys %{ $hash->{icmp} }) {
-            $self->{icmphdr}->$k( $hash->{icmp}->{$_} );
+            $self->{icmphdr}->$k( $hash->{icmp}->{$k} );
             if ($k !~ /gateway/) {
                 if ($un{$k}) { 
                     my $meth = $un{$k};
@@ -625,10 +627,10 @@ sub send {
 sub pcapinit {
     my ($self, $device, $filter, $size, $tout) = @_;
     my $promisc = 0x100;
-    my ($erbuf, $pcap, $program);
+    my ($erbuf, $program) = ('', 0);
 
-    $pcap = open_live($device,$size,$promisc,$tout,$erbuf);
-    croak "$erbuf" if (! $pcap);
+    my $pcap = open_live($device,$size,$promisc,$tout,$erbuf);
+    croak "Could not open_libe: '$erbuf'" if (! $pcap);
     croak "compile(): check string with filter" if (compile($pcap,$program,$filter,0,0) < 0);
     setfilter($pcap, $program);
 
@@ -862,7 +864,7 @@ can be used in the perl callback as a perl filehandle.
 B<loop> and B<dispatch> can run a perl code refs as a callbacks for packet 
 analyzing and printing.
 the fourth parameter for B<loop> and B<dispatch> can be an array or a hash 
-reference and it can be unreferensed in a perl callback. 
+reference and it can be dereferenced in a perl callback. 
 
 =item next
 
@@ -875,6 +877,10 @@ where the B<sec> and the B<microsec> are the values returned by
 gettimeofday(3).
 If B<microsec> is less than 100000 then zeros will be added to the 
 left side of B<microsec> for adjusting to six digits.
+
+Similar to sprintf("%.6f", Time::HiRes::time());
+
+TODO: replace this function with use of Time::HiRes ?
 
 =item linkoffset
 
@@ -943,6 +949,10 @@ The members in the array can be given in any order.
 For get the ethernet parameters you have to use the key B<eth> and the 
 values of the array (B<dest>,B<source>,B<proto>). The values of the B<dest> and 
 the B<source> will look like the output of the ifconfig(8) e.g. 00:00:E8:43:0B:2A. 
+
+=item open_live
+
+
 
 =item send($delay,$times)
 
@@ -1077,6 +1087,9 @@ as Perl itself.
 =head1 SEE ALSO
 
 perl(1),Net::RawIP::libpcap(3pm),tcpdump(1),RFC 791-793,RFC 768.
+
+L<Net::Pcap>, L<Net::Pcap::Reassemble>, L<Net::PcapUtils>
+L<Net::Pcap::FindDevice>
 
 =cut
 

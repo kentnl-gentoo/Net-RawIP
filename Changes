@@ -1,5 +1,12 @@
 Revision history for Perl extension Net::RawIP.
 
+0.21 Mon Mar 26 22:53:48 2007
+    - fix looping bug in set_icmp (Micha Nasriachi) 
+    - fix tests to work both as root and as regular user
+
+0.21_04
+    - Skipped
+
 
 0.21_03 Fri Sep 15 11:26:17 IDT 2006
     - Received official maintainership from Sergey

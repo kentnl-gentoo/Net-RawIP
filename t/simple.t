@@ -7,15 +7,24 @@ my $tests;
 plan tests => $tests;
 
 use Data::Dumper qw(Dumper);
+use English qw( -no_match_vars );
 
 my $warn;
 BEGIN {
-    $SIG{__WARN__} = sub { $warn .= shift };
+    $SIG{__WARN__} = sub { $warn = shift; }
 }
-
 use_ok 'Net::RawIP';
-like($warn, qr{Must have EUID == 0 to use Net::RawIP}, 'warning at load time');
-BEGIN { $tests += 2; }
+BEGIN { $tests += 1; }
+{
+    if ($EUID) {
+        like $warn, qr/Must have EUID == 0/, "root warning seen";
+    } else {
+        ok(not(defined $warn), "no root warning");
+    }
+    BEGIN { $tests += 1; }
+}
+$SIG{__WARN__} = 'DEFAULT';
+
 
 $warn = '';
 diag "Testing $Net::RawIP::VERSION";
