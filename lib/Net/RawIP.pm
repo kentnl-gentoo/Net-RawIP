@@ -1,55 +1,3 @@
-# Create sub modules 
-package Net::RawIP::iphdr;
-use strict;
-use warnings;
-use Class::Struct qw(struct);
-our @iphdr 
-    = qw(version ihl tos tot_len id frag_off ttl protocol check saddr daddr);
-struct ( 'Net::RawIP::iphdr' => [ map { $_ => '$' } @iphdr ] );
-
-package Net::RawIP::tcphdr;
-use strict;
-use warnings;
-use Class::Struct qw(struct);
-our @tcphdr = qw(source dest seq ack_seq doff res1 res2 urg ack psh rst syn
-    fin window check urg_ptr data);
-struct ( 'Net::RawIP::tcphdr' => [map { $_ => '$' } @tcphdr ] );
-
-package Net::RawIP::udphdr;
-use strict;
-use warnings;
-use Class::Struct qw(struct);
-our @udphdr = qw(source dest len check data);
-struct ( 'Net::RawIP::udphdr' => [map { $_ => '$' } @udphdr ] );
-
-package Net::RawIP::icmphdr;
-use strict;
-use warnings;
-use Class::Struct qw(struct);
-our @icmphdr = qw(type code check gateway id sequence unused mtu data);
-struct ( 'Net::RawIP::icmphdr' => [map { $_ => '$' } @icmphdr ] );
-
-package Net::RawIP::generichdr;
-use strict;
-use warnings;
-use Class::Struct qw(struct);
-our @generichdr = qw(data);
-struct ( 'Net::RawIP::generichdr' => [map { $_ => '$' } @generichdr ] );
-
-package Net::RawIP::opt;
-use strict;
-use warnings;
-use Class::Struct qw(struct);
-my @opt = qw(type len data);
-struct ( 'Net::RawIP::opt' => [map { $_ => '@' } @opt ] );
-
-package Net::RawIP::ethhdr;
-use strict;
-use warnings;
-use Class::Struct qw(struct);
-our @ethhdr = qw(dest source proto);
-struct ( 'Net::RawIP::ethhdr' => [map { $_ => '$' } @ethhdr ] );
-
 # Main package 
 package Net::RawIP;
 use strict;
@@ -60,6 +8,13 @@ use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $AUTOLOAD);
 use subs qw(timem ifaddrlist);
 
 use English qw( -no_match_vars );
+use Net::RawIP::iphdr;
+use Net::RawIP::tcphdr;
+use Net::RawIP::udphdr;
+use Net::RawIP::icmphdr;
+use Net::RawIP::generichdr;
+use Net::RawIP::opt;
+use Net::RawIP::ethhdr;
 
 require Exporter;
 require DynaLoader;
@@ -83,7 +38,7 @@ timem linkoffset ifaddrlist rdev)
                             ]
 );
 
-$VERSION = '0.21';
+$VERSION = '0.22';
 use List::MoreUtils qw(none);
 
 # The number of members in the sub modules
@@ -396,8 +351,29 @@ sub generic_default {
     @{$class->{generichdr}} = ('');
 }
 
+# 2xS = 16bits
+# 1xI = 32bits or more
+# Byte ordering is unspecified, so it's probably native ordering.
+# To me using I seems like a bad idea since in some cases this might
+# be more than 32 bits yet the network structures require exactly
+# 32 bits, plus they must always be in network byte order (big-endian)
+# Steve Bonds
 sub s2i {
     return unpack("I1", pack("S2", @_))
+}
+
+# This lies a bit-- the original values passed in may not be in
+# network byte order but this will reverse them on little-endian hosts
+# while (hopefully) leaving them alone on big-endian hosts, resulting
+# in the correct on-the-wire byte ordering.  Steve Bonds
+sub n2L {
+    return unpack("L1", pack("n2", @_));
+}
+
+# This does the same thing, but for the whole 32 bits at once, suitable
+# for ICMP packets with the gateway hash key set.
+sub N2L {
+    return unpack("L1", pack("N1", @_));
 }
 
 sub _pack {
@@ -405,6 +381,7 @@ sub _pack {
     if (@_) {
         # A low level *_pkt_creat() functions take reference of array 
         # with all of fields of the packet and return properly packed scalar  
+        # These are defined in the Raw.xs file.
         my $function = $self->{proto} . '_pkt_creat';
         ## no critic (ProhibitNoStrict)
         no strict 'refs';
@@ -424,7 +401,25 @@ sub packet {
 
 sub set {
     my ($self, $hash) = @_;
-    # To handle C union in the ICMP header
+    # To handle C union in the ICMP header.  That C union is either:
+    # struct
+    # {
+    #   u_int16_t id;
+    #   u_int16_t sequence;
+    # } echo;         /* echo datagram */
+    # u_int32_t   gateway;    /* gateway address */
+    # struct
+    # {
+    #   u_int16_t unused;
+    #   u_int16_t mtu;
+    # } frag;         /* path mtu discovery */
+    # So we can either set:
+    #  + id and sequence, or
+    #  + a single gateway address, or
+    #  + unused and MTU
+
+    # My guess is that this exists simply to make it easier to call
+    # things in Perl by the same name as the C union.  Steve Bonds
     my %un = (
             id     => 'sequence',
             unused => 'mtu',
@@ -445,27 +440,37 @@ sub set {
         }
     }
 
+    # This looks like a good spot to apply the endianness fixes for
+    # id/sequence and/or mtu/unused.  Steve Bonds
     if (exists $hash->{icmp}) {
         foreach my $k (keys %{ $hash->{icmp} }) {
             $self->{icmphdr}->$k( $hash->{icmp}->{$k} );
             if ($k !~ /gateway/) {
                 if ($un{$k}) { 
+                    # if $k is "id" or "unused"
                     my $meth = $un{$k};
-                    $self->{icmphdr}->gateway(s2i(
-                                    ($self->{icmphdr}->$k()),
-                                    ($self->{icmphdr}->$meth())
-                                    ));
+                    $self->{icmphdr}->gateway(n2L(
+                       $self->{icmphdr}->$k(),
+                       $self->{icmphdr}->$meth()
+                    ));
                 }       
                 elsif ($revun{$k}) {
+                    # if $k is "sequence" or "mtu"
                     my $meth = $revun{$k};
-                    $self->{icmphdr}->gateway(s2i(
-                                        ($self->{icmphdr}->$meth()),
-                                        ($self->{icmphdr}->$k())
-                                        ));
+                    $self->{icmphdr}->gateway(n2L(
+                       $self->{icmphdr}->$meth(),
+                       $self->{icmphdr}->$k()
+                    ));
                 }
+            } else {
+              # $k =~ /gateway/
+              # Not setting icmp => gateway since it's set by the user
+              # However, it may still be in the wrong byte order so
+              # reverse it if needed.  Steve Bonds
+              $self->{icmphdr}->gateway(N2L( $hash->{icmp}->{gateway} ));
             }
         }
-    }
+      }
 
     my $saddr = $self->{iphdr}->saddr;
     my $daddr = $self->{iphdr}->daddr;
@@ -683,19 +688,19 @@ Net::RawIP - Perl extension for manipulate raw ip packets with interface to B<li
 =head1 SYNOPSIS
 
   use Net::RawIP;
-  $n = Net::RawIP->new;
-  $n->set({
-            ip  => {
-                    saddr => 'my.target.lan',
-                    daddr => 'my.target.lan',
-                    },
-            tcp => {
-                    source => 139,
-                    dest   => 139,
-                    psh    => 1,
-                    syn    => 1,
-                    },
-         });
+  $n = Net::RawIP->new({
+                        ip  => {
+                                saddr => 'my.target.lan',
+                                daddr => 'my.target.lan',
+                               },
+                       });
+                        tcp => {
+                                source => 139,
+                                dest   => 139,
+                                psh    => 1,
+                                syn    => 1,
+                               },
+                       });
   $n->send;
   $n->ethnew("eth0");
   $n->ethset(source => 'my.target.lan', dest =>'my.target.lan');    
@@ -771,7 +776,8 @@ Please look at the examples in the examples/ folder of the distribution.
 B<ARGPROTO> is one of (B<tcp>, B<udp>, B<icmp>, B<generic>) defining the
 protcol of the current packet. Defaults to B<tcp>.
 
-You can B<NOT> change protocol in the object after its creation.
+You can B<NOT> change protocol in the object after its creation.  Unless you
+want your packet to be TCP, you must set the protocol type in the new() call.
 
 The possible values of B<PROTOKEY> depend on the value of ARGPROTO
 
@@ -789,6 +795,8 @@ If ARGPROTO is B<udp> PROTOKEY can be one of
 
 If ARGPROTO is B<generic> PROTOKEY can be B<data> only.
 
+The B<data> entries are scalars containing packed network byte order
+data.
 
 As the real icmp packet is a C union one can specify specify only one 
 of the following set of values.
@@ -1083,6 +1091,11 @@ Current Maintainer: Gabor Szabo <gabor@pti.co.il>
 Copyright (c) 1998-2006 Sergey Kolychev. All rights reserved. This program is free
 software; you can redistribute it and/or modify it under the same terms
 as Perl itself.
+
+=head1 CREDITS
+
+Steve Bonds <u5rhsiz02@sneakemail.com>
+  + work on some endianness bugs and improving code comments
 
 =head1 SEE ALSO
 

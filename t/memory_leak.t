@@ -72,10 +72,12 @@ sub do_something {
                         },
                 });
 }
-my $size_change = get_process_size($$) - $start_size;
+my $end_size = get_process_size($$);
+my $size_change = $end_size - $start_size;
+diag "End size: $end_size";
 diag "Size change was: $size_change";
 cmp_ok($size_change, '<', 200_000, 
-    'normally it should be 0 but we are satisfied with 200,000 here, see commnts in test file');
+    'normally it should be 0 but we are satisfied with 200,000 here, see comments in test file');
 BEGIN { $tests += 1; }
 # Once upon a time there was a memory leak on Solaris created by the above
 # loop.

@@ -985,6 +985,11 @@ CODE:
 OUTPUT:
     RETVAL  
 
+ # This assembles an ICMP packet based on the data passed in as an
+ # array reference from the Perl module.  Populating this are with
+ # comments as I try to understand the code better so I'll remember
+ # what I thought each bit did.
+ # Steve Bonds
 
 SV *
 icmp_pkt_creat(p)
@@ -999,9 +1004,25 @@ CODE:
     opt = 0;
     iplen = 20;
     if (SvTYPE(SvRV(p)) == SVt_PVAV)
+	/* pkt allows for easy access in C to the original parameter, p.  
+           Steve Bonds */
         pkt = (AV *)SvRV(p);
     else
         croak("Not array reference\n");
+
+    /* Populate the C pii ICMP packet structure with information from "pkt", which
+       is the C char pointer to the array reference passed in.  The perlguts
+       man page recommends checking that this returns non-null before calling
+       SvIV on it, probably to follow the Second Commandment of C:
+
+         Thou shalt not follow the NULL pointer, for chaos and madness await thee at its end.
+
+       (http://web.archive.org/web/19961109205914/http://www.lysator.liu.se/c/ten-commandments.html)
+
+       however, it would appear that the original author didn't and I don't want to
+       make too many changes yet, so I'll pretend I didn't see it for now...
+
+       Steve Bonds */
     pii.ih.version = SvIV(*av_fetch(pkt,0,0));
     pii.ih.ihl = SvIV(*av_fetch(pkt,1,0));
     pii.ih.tos = SvIV(*av_fetch(pkt,2,0));
@@ -1016,25 +1037,99 @@ CODE:
     pii.ih.saddr = htonl(SvIV(*av_fetch(pkt,9,0)));
     pii.ih.daddr = htonl(SvIV(*av_fetch(pkt,10,0)));
     if (!pii.ih.check)
-        pii.ih.check = in_cksum((unsigned short *)&pii,iplen); 
+        pii.ih.check = in_cksum((unsigned short *)&pii,iplen);
+
+    /* We're done with the basic IP header assembly into the pii
+    structure.  Move on to the ICMP header specifics.  Steve Bonds */
+
     pii.ich.type = SvIV(*av_fetch(pkt,11,0));
     pii.ich.code = SvIV(*av_fetch(pkt,12,0));
     pii.ich.checksum = htons(SvIV(*av_fetch(pkt,13,0)));
     pii.ich.un.gateway = SvIV(*av_fetch(pkt,14,0));
+
+    /* Array index 20 is the "data" area of the ICMP packet.  av_fetch only
+    returns a scalar so the data area must be one, which explains why it
+    didn't work so great when I used an array reference here based on my
+    incorrect understanding of the POD docs.  Steve Bonds */
     if (av_fetch(pkt,20,0)) {
         if (SvROK(*av_fetch(pkt,20,0))) {
             opt++;
+
+	    /* I don't understand why this module calls an internal parsing function
+	       on a raw data field supplied by the user.  This may or may not
+	       associate with an actual IP structure, depending on what the
+	       user of this module decides.  It appears that this is done to
+               get the proper packet length for the IP header, but this could
+               also be done based on the scalar length of the raw data area
+               itself (SvCUR).  
+
+	       Why wouldn't the sum of these work for the total IP packet length:
+	         + IP header (20)
+		 + ICMP header (8)
+		   - type (1)
+		   - code (1)
+		   - checksum (2)
+		   - id or unused (2)
+		   - sequence or mtu (2)
+		 + ICMP data (variable length)
+
+	       Finding the total length shouldn't require any decoding of the ICMP
+	       data area.  Doing so just gives this module additional places to
+	       either break/crash or mangle the intended data on its way out.
+
+	       In the interest of not breaking the module until I understand it better,
+	       leave it alone for now.
+
+	       Steve Bonds */
             ip_opts = ip_opts_creat(*av_fetch(pkt,20,0));
             pii.ih.ihl = 5 + SvCUR(ip_opts)/4;
             iplen = 4*pii.ih.ihl;
+
+            /* Array index 19 is the MTU or Sequence.  SvCUR returns the length of that scalar.
+               Steve Bonds */
             pii.ih.tot_len = BSDFIX(iplen + 8 + SvCUR(*av_fetch(pkt,19,0)));
             pii.ih.check = 0;
+
+	    /* Create a place to copy the pii structure for rebuilding the checksum.
+               Steve Bonds */
             ptr = (u_char*)safemalloc(iplen + 8);
+	    /* Copy the 20 byte IP header in */
             memcpy(ptr,(u_char*)&pii,20);
+
+	    /* Either this is a bug or I don't understand something going on here.
+	       ip_opts is derived above from field 20 of "pkt" which is the
+	       user-supplied data area of the ICMP packet they want to send.
+	       This data area is supposed to be an IP packet, but since they
+	       can set it to any arbitrary string of bytes, it doesn't necessarily
+	       have to be.  So it looks to me like we just joined the 20 byte IP
+	       header with the 8 bytes ip_opts creates from the user data area.
+	       I would instead have expected this to be the 8 bytes of ICMP
+	       packet header we created above.  Steve Bonds */
             memcpy(ptr+20,SvPV(ip_opts,PL_na),SvCUR(ip_opts));
+
+	    /* Here's the 8 bytes we created above getting copied in.  I would have
+	       expected this line to be before the above line. */
             memcpy(ptr+20+SvCUR(ip_opts),(u_char*)&pii + 20,8);
+
+	    /* Re-build a valid IP checksum for our packet. */
             ((struct iphdr*)ptr)->check = in_cksum((unsigned short *)ptr,iplen);
+
+	    /* Create a new scalar that will contain the string value contained
+	       in our temporary spot *ptr.  This in essence becomes a packed
+	       string value in perl when it gets sent back.  Steve Bonds */
             RETVAL = newSVpv((char*)ptr, sizeof(IIPKT)+SvCUR(ip_opts));
+
+	    /* Toss field 19 from the original array (MTU/Sequence) onto 
+	       the end of the RETVAL scalar created above.  Alas, these are
+	       2-byte values so these need to be converted to proper network 
+	       byte order before they will be valid.  This looks like the 
+	       bug I came here to find.
+
+	       I think it may be simpler to convert this to network byte order
+	       via Perl before it gets passed in to this code so as to minimize 
+	       the changes needed inside this harder-to-follow .xs file.
+
+	       Steve Bonds */
             sv_catsv(RETVAL, *av_fetch(pkt, 19, 0));
             Safefree(ptr);
             sv_2mortal(ip_opts);

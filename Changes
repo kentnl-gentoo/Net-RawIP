@@ -1,5 +1,12 @@
 Revision history for Perl extension Net::RawIP.
 
+0.22_01 Mon Jul 16 2007 (Steve Bonds)
+    - fix endianness bug in ICMP packet creation
+    - add lots of comments on what's going on in the ICMP portion
+      of the RawIP.xs and RawIP.pm files
+    - break out sub-packages to their own files so "make test"
+      works even with Critic enabled
+
 0.21 Mon Mar 26 22:53:48 2007
     - fix looping bug in set_icmp (Micha Nasriachi) 
     - fix tests to work both as root and as regular user
@@ -220,3 +227,4 @@ Revision history for Perl extension Net::RawIP.
       including discovering mac adresses
 
  
+
