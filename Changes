@@ -1,5 +1,8 @@
 Revision history for Perl extension Net::RawIP.
 
+0.23 Tue Jan8  2007
+    - add version number to submodules
+
 0.22 Tue Jan8  2007
     - remove dependency on List::MoreUtils
 

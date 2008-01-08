@@ -38,7 +38,7 @@ timem linkoffset ifaddrlist rdev)
                             ]
 );
 
-$VERSION = '0.22';
+$VERSION = '0.23';
 
 # The number of members in the sub modules
 my %n = (
