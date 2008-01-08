@@ -1,5 +1,8 @@
 Revision history for Perl extension Net::RawIP.
 
+0.22 Tue Jan8  2007
+    - remove dependency on List::MoreUtils
+
 0.22_01 Mon Jul 16 2007 (Steve Bonds)
     - fix endianness bug in ICMP packet creation
     - add lots of comments on what's going on in the ICMP portion

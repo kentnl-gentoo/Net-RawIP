@@ -2,7 +2,6 @@
 
 use strict;
 use warnings;
-use List::MoreUtils	qw{ any 	};
 use Data::Dumper qw(Dumper);
 use English qw( -no_match_vars );
 use Test::More;
@@ -43,7 +42,7 @@ sub test_undef {
 		},
 	});
 
-	return 0 if any {!defined($_)} @{ $raw->{icmphdr} };
+	return 0 if grep {!defined($_)} @{ $raw->{icmphdr} };
 
 	return 1;
 }

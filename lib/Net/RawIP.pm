@@ -39,7 +39,6 @@ timem linkoffset ifaddrlist rdev)
 );
 
 $VERSION = '0.22';
-use List::MoreUtils qw(none);
 
 # The number of members in the sub modules
 my %n = (
@@ -86,7 +85,7 @@ sub new {
     $ref ||= {};
     foreach my $k (keys %$ref) {
         croak "'$k' is not a valid key\n" 
-            if none {$_ eq $k} (@valid_protocols, 'ip');
+            if not grep {$_ eq $k} (@valid_protocols, 'ip');
     }
     $self->proto($ref);
 

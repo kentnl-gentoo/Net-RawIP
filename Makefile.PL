@@ -66,6 +66,9 @@ my $obj = $config{$name}->[1];
 print $config{$name}->[2];
 eval $config{$name}->[3];
 
+print "Compiler: $Config{cc}\n";
+system "$Config{cc} --version";
+
 locate_pcap();
 
 
@@ -77,7 +80,6 @@ WriteMakefile(
     INC            => '',      
     OBJECT         => $obj,
     PREREQ_PM      => {
-        'List::MoreUtils'  => 0,
     },
 );
 

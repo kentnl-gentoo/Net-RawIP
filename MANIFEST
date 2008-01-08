@@ -4,7 +4,6 @@ MANIFEST.SKIP
 Makefile.PL
 README
 README.Devel
-META.yml
 TODO
 
 lib/Net/RawIP.pm
@@ -47,3 +46,4 @@ t/pod-coverage.t
 t/set_icmp.t
 t/critic.t
 t/timem.t
+META.yml                                 Module meta-data (added by MakeMaker)
