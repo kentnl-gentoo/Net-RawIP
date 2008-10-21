@@ -1454,7 +1454,6 @@ compile(p,fp,str,optimize,netmask)
 CODE:
     fp = (struct bpf_program *)safemalloc(sizeof(struct bpf_program));
     RETVAL = pcap_compile(p,fp,str,optimize,netmask);
-    Safefree(fp);
 OUTPUT: 
     fp
     RETVAL

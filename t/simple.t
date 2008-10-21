@@ -9,24 +9,9 @@ plan tests => $tests;
 use Data::Dumper qw(Dumper);
 use English qw( -no_match_vars );
 
-my $warn;
-BEGIN {
-    $SIG{__WARN__} = sub { $warn = shift; }
-}
 use_ok 'Net::RawIP';
-BEGIN { $tests += 1; }
-{
-    if ($EUID) {
-        like $warn, qr/Must have EUID == 0/, "root warning seen";
-    } else {
-        ok(not(defined $warn), "no root warning");
-    }
-    BEGIN { $tests += 1; }
-}
-$SIG{__WARN__} = 'DEFAULT';
 
 
-$warn = '';
 diag "Testing $Net::RawIP::VERSION";
 
 {
@@ -51,8 +36,7 @@ diag "Testing $Net::RawIP::VERSION";
     #diag Dumper $rawip;
     is_deeply([sort keys %$rawip], [qw(iphdr pack proto tcphdr)]);
     
-    is($warn, '', 'no warnnigs');
-    BEGIN { $tests += 9; }
+    BEGIN { $tests += 8; }
 }
 
 {
@@ -122,7 +106,6 @@ diag "Testing $Net::RawIP::VERSION";
     #diag Dumper $scalar;
 
     #$rawip->send(0,1);
-    is($warn, '', 'no warnnigs');
     BEGIN { $tests += 16; }
 }
 
@@ -151,8 +134,7 @@ diag "Testing $Net::RawIP::VERSION";
     isnt(exists($rawip->{optsip}), 'optsip removed');
     is_deeply($rawip->{udphdr}, [0, 0, 0, 0, '', 0], 'udphdr reset');
 
-    is($warn, '', 'no warnnigs');
-    BEGIN { $tests += 9; }
+    BEGIN { $tests += 8; }
 }
 
 {
@@ -172,8 +154,7 @@ diag "Testing $Net::RawIP::VERSION";
     is_deeply($rawip->{iphdr},  \@iphdr_result);
     is_deeply([sort keys %$rawip], [qw(icmphdr iphdr pack proto)]);
 
-    is($warn, '', 'no warnnigs');
-    BEGIN { $tests += 8; }
+    BEGIN { $tests += 7; }
 }
 
 

@@ -38,7 +38,7 @@ timem linkoffset ifaddrlist rdev)
                             ]
 );
 
-$VERSION = '0.23';
+$VERSION = '0.24';
 
 # The number of members in the sub modules
 my %n = (
@@ -67,11 +67,6 @@ sub AUTOLOAD {
     goto &$AUTOLOAD;
 }
 bootstrap Net::RawIP $VERSION;
-
-# Warn if called from non-root accounts
-# TODO: move this warning only when calling functions that really need root
-# priviliges
-carp "Must have EUID == 0 to use Net::RawIP, currently you are seen with EUID=$EUID" if $EUID;
 
 
 # The constructor
@@ -643,7 +638,7 @@ sub pcapinit {
 
 sub pcapinit_offline {
     my($self,$fname) = @_;
-    my ($erbuf,$pcap);
+    my ($erbuf,$pcap) = ('','');
     $pcap = open_offline($fname, $erbuf);
     croak $erbuf if (! $pcap);
 
@@ -938,7 +933,7 @@ the array which will be filled with an asked parameters in order as they have or
 packet if you'd call it with an array context.
 If this method is called with a scalar context then it returns a hash reference.
 In that hash will stored an asked parameters as values,the keys are their names.
- 
+
 The input parameter is a hash reference. In this hash can be three keys.
 They are a B<ip> and an one of the B<ARGPROTO>s. The value must be an array reference. This
 array contain asked parameters.
@@ -1079,13 +1074,26 @@ $n->optunset('ip','tcp');
 
 =back
 
-=head1 AUTHOR
+=head1 AUTHORS
 
-Sergey Kolychev <ksv@al.lg.ua>
+Current maintainer is SE<eacute>bastien Aperghis-Tramoni 
+E<lt>sebastien@aperghis.netE<gt>
 
-Current Maintainer: Gabor Szabo <gabor@pti.co.il>
+Previous authors & maintainers:
 
-=head1 COPYRIGHT
+=over
+
+=item *
+
+Sergey Kolychev E<lt>ksv@al.lg.uaE<gt>
+
+=item *
+
+Gabor Szabo E<lt>gabor@pti.co.ilE<gt>
+
+=back
+
+=head1 COPYRIGHT & LICENSE
 
 Copyright (c) 1998-2006 Sergey Kolychev. All rights reserved. This program is free
 software; you can redistribute it and/or modify it under the same terms
@@ -1098,7 +1106,7 @@ Steve Bonds <u5rhsiz02@sneakemail.com>
 
 =head1 SEE ALSO
 
-perl(1),Net::RawIP::libpcap(3pm),tcpdump(1),RFC 791-793,RFC 768.
+perl(1), Net::RawIP::libpcap(3pm), tcpdump(1), RFC 791-793, RFC 768.
 
 L<Net::Pcap>, L<Net::Pcap::Reassemble>, L<Net::PcapUtils>
 L<Net::Pcap::FindDevice>

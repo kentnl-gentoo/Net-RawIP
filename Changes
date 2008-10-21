@@ -1,5 +1,14 @@
 Revision history for Perl extension Net::RawIP.
 
+2008.10.21 - 0.24 - Sebastien Aperghis-Tramoni (SAPER)
+  - [BUGFIX] Fixed a segfault and a warning, thanks to Mike Lowell.
+  - [DIST] Simplified the detection logic to make it work on more systems.
+  - [DIST] Declared all prerequisite modules.
+  - [TESTS] Removed all the tests related to the warning that was emitted
+    by the module when ran as non root.
+  - [TESTS] Fixed several tests to make them more portable.
+  - [TESTS] Added 00-load.t, 01-api.t
+
 0.23 Tue Jan8  2007
     - add version number to submodules
 

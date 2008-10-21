@@ -1,49 +1,18 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
-
+use Data::Dumper    qw(Dumper);
+use English         qw(-no_match_vars);
 use Test::More;
-my $tests;
+use Net::RawIP;
 
-use Data::Dumper qw(Dumper);
-use English qw( -no_match_vars );
-eval {
-    require Proc::ProcessTable;
-};
-if ($@) {
-    plan skip_all  => "Proc::ProcessTable is needed for this test";
-}
-else {
-    plan tests => $tests;
-}
 
-sub get_process_size {
-    my ($pid) = @_;
-    my $pt = Proc::ProcessTable->new;
-    foreach my $p ( @{$pt->table} ) {
-        return $p->size if $pid == $p->pid;
-    }
-    return;
-}
+plan skip_all  => "Proc::ProcessTable is needed for this test"
+    unless eval "use Proc::ProcessTable; 1";
 
-my $warn;
-BEGIN {
-    $SIG{__WARN__} = sub { $warn = shift };
-}
+plan tests => my $tests;
 
-use_ok 'Net::RawIP';
-BEGIN { $tests += 1; }
-{
-    if ($EUID) {
-        like $warn, qr/Must have EUID == 0/, "root warning seen";
-    } else {
-        ok(not(defined $warn), "no root warning");
-    }
-    BEGIN { $tests += 1; }
-}
-$SIG{__WARN__} = 'DEFAULT';
 
-$warn = '';
 diag "Testing Net::RawIP v$Net::RawIP::VERSION";
 
 # one can run this test giving a number on the command line
@@ -58,6 +27,7 @@ diag "Start size: $start_size";
 for (2..$count) {
     do_something();
 }
+
 sub do_something {
     my $n = Net::RawIP->new({ udp => {} });
     $n->set({
@@ -102,4 +72,15 @@ BEGIN { $tests += 1; }
 # perl -Iblib/lib -Iblib/arch t/memory_leak.t 1000000
 
 
+
+sub get_process_size {
+    my ($pid) = @_;
+    my $pt = Proc::ProcessTable->new;
+
+    foreach my $p ( @{$pt->table} ) {
+        return $p->size if $pid == $p->pid;
+    }
+
+    return
+}
 

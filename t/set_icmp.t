@@ -8,22 +8,8 @@ use Test::More;
 my $tests;
 plan tests => $tests;
 
-my $warn;
-BEGIN {
-    $SIG{__WARN__} = sub { $warn = shift };
-}
 
 use Net::RawIP 		qw{ :pcap 	};
-
-{
-    if ($EUID) {
-        like $warn, qr/Must have EUID == 0/, "root warning seen";
-    } else {
-        ok(not(defined $warn), "no root warning");
-    }
-    BEGIN { $tests += 1; }
-}
-$SIG{__WARN__} = 'DEFAULT';
 
 
 is( test_undef(), 1, 'no_undefs' );

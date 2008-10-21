@@ -1,16 +1,17 @@
-use ExtUtils::MakeMaker;
-use Config;
 use strict;
 use warnings;
+use Config;
+use DynaLoader;
+use ExtUtils::MakeMaker;
 
 my %config = (
     'linux' => [
         '-D_LINUX_ -D_ETH_ -D_IFLIST_ ' . (defined $ENV{CFLAGS} ? $ENV{'CFLAGS'} : ''),
         'RawIP.o util.o eth.o ifaddrlist.o',
         '',
-        q{$def .= ' -D_GLIBC_' if -e "/usr/include/net/if_packet.h"}, 
+        q{ $def .= ' -D_GLIBC_' if -e "/usr/include/net/if_packet.h" }, 
     ],
-              
+
     'solaris' => [ 
         '-D_SOLARIS_ -D_IFLIST_',
         'RawIP.o util.o ifaddrlist.o',
@@ -18,22 +19,8 @@ my %config = (
         . "Sorry, the rdev function is not imlemented on Solaris\n",
         '',         
     ],
-            
+
     'freebsd' => [ 
-        '-D_BSDRAW_ -D_ETH_ -D_BPF_ -D_IFLIST_ -DHAVE_SOCKADDR_SA_LEN',
-        'RawIP.o util.o ifaddrlist.o eth.o rdev.o',
-        '',
-        '',
-    ],
-              
-    'netbsd' => [
-        '-D_BSDRAW_ -D_ETH_ -D_BPF_ -D_IFLIST_ -DHAVE_SOCKADDR_SA_LEN',
-        'RawIP.o util.o ifaddrlist.o eth.o rdev.o',
-        '',
-        '',
-    ],
-                    
-    'bsdos' => [
         '-D_BSDRAW_ -D_ETH_ -D_BPF_ -D_IFLIST_ -DHAVE_SOCKADDR_SA_LEN',
         'RawIP.o util.o ifaddrlist.o eth.o rdev.o',
         '',
@@ -44,9 +31,9 @@ my %config = (
         '-D_ETH_ -D_BPF_ -D_IFLIST_ -DHAVE_SOCKADDR_SA_LEN',
         'RawIP.o util.o ifaddrlist.o eth.o rdev.o',
         '',
-        q{$def .= ' -D_BSDRAW_' if join('',(split /\./,$Config{osvers})[0,1]) < 21},
+        q{ $def .= ' -D_BSDRAW_' if join('',(split /\./,$Config{osvers})[0,1]) < 21 },
     ],
-      
+
     'others'   => [
         '',
         'RawIP.o util.o',
@@ -57,10 +44,11 @@ my %config = (
     ]
 );          
 
-my $name = $Config{osname}; 
-if (not exists $config{$name}) {
-    $name = 'others';
-}
+$config{bsdos } = $config{freebsd};
+$config{darwin} = $config{freebsd};
+$config{netbsd} = $config{freebsd};
+
+my $name = $Config{osname} || "others"; 
 my $def = $config{$name}->[0];
 my $obj = $config{$name}->[1];
 print $config{$name}->[2];
@@ -73,53 +61,39 @@ locate_pcap();
 
 
 WriteMakefile(
-    NAME           => 'Net::RawIP',
-    VERSION_FROM   => 'lib/Net/RawIP.pm', 
+    NAME            => 'Net::RawIP',
+    LICENSE         => 'perl',
+    AUTHOR          => 'Sebastien Aperghis-Tramoni <sebastien@aperghis.net>',
+    VERSION_FROM    => 'lib/Net/RawIP.pm', 
+    ABSTRACT_FROM   => 'lib/Net/RawIP.pm', 
     LIBS           => ['-lpcap'],   
     DEFINE         => $def,      
     INC            => '',      
     OBJECT         => $obj,
     PREREQ_PM      => {
+        # prereqs
+        'Carp'         => 0,
+        'Class::Struct'=> 0,
+        'Data::Dumper' => 0,
+        'English'      => 0,
+        'Getopt::Long' => 0,
+        'Socket'       => 0,
+
+        # build/test prereqs
+        'Test::More'   => 0,
     },
+    PL_FILES        => {},
 );
 
 
-# on Ubuntu file locations:
-# /usr/lib/libpcap.so.0.8
-# /usr/lib/libpcap.so.0.9.4
-# /usr/lib/libpcap.so.0.7.2
-# /usr/lib/libpcap.so.0.7
-# /usr/lib/libpcap.a
-# /usr/lib/libpcap.so
-
-# /usr/include/pcap.h
 sub locate_pcap {
-    my $header = '/usr/include/pcap.h';
+    # temporary; in next releases, I'll just completely remove the pcap parts
+    # from Net::RawIP and use Net::pcap instead
 
-    if (! -e $header) {
-        print <<'END_REPORT';
-Could not find libpcap, see the README file how to install it.
-
-If you do have libpcap installed, please let me know the
-locations of the pcap.h file and what operating system are you using
-so I can include it in the next release
-
-END_REPORT
-        die "Could not find pcap.h. Makefile.PL was not created.\n";
-    }
-
-    open my $fh, '<', $header or die "Could not open $header for reading: $!";
-    while (my $line = <$fh>) {
-        if ($line =~ /PCAP_VERSION/) {
-            print $line;
-        }
-    }
-
-
-    print "The following libpcap.so files were found:\n\n";
-    my @so_files = glob "/usr/lib/libpcap.so*";
-    die "No libpcap.so file found. Makefile.PL was not created.\n"
-        if not @so_files;
-    print map {"$_\n"} @so_files;
+    my @paths = DynaLoader::dl_findfile("-lpcap");
+    die <<'REASON' unless @paths;
+Could not load the pcap library. Please see the README file on how
+to install it. Be sure to also install the C headers (pcap.h).
+REASON
 }
 

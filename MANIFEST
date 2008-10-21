@@ -1,7 +1,8 @@
+META.yml                                 Module meta-data (added by MakeMaker)
+Makefile.PL
 Changes
 MANIFEST
 MANIFEST.SKIP
-Makefile.PL
 README
 README.Devel
 TODO
@@ -38,12 +39,13 @@ examples/traceroute
 examples/watch
 examples/sniff.pl
 
-t/simple.t
-t/memory_leak.t
+t/00-load.t
+t/01-api.t
+t/90-pod.t
+t/91-pod-coverage.t
+t/99-critic.t
 t/iflist.t
-t/pod.t
-t/pod-coverage.t
+t/memory_leak.t
 t/set_icmp.t
-t/critic.t
+t/simple.t
 t/timem.t
-META.yml                                 Module meta-data (added by MakeMaker)
