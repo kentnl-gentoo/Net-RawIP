@@ -1,5 +1,10 @@
 Revision history for Perl extension Net::RawIP.
 
+2008.10.22 - 0.25 - Sebastien Aperghis-Tramoni (SAPER)
+  - [TESTS] CPAN-RT#39252: Proc::ProcessTable does not support the size
+    attribute on all systems. Thanks to Havard Eidnes for the patch.
+  - [DOC] Improved the documentation a bit.
+
 2008.10.21 - 0.24 - Sebastien Aperghis-Tramoni (SAPER)
   - [BUGFIX] Fixed a segfault and a warning, thanks to Mike Lowell.
   - [DIST] Simplified the detection logic to make it work on more systems.

@@ -20,7 +20,11 @@ BEGIN { $tests += 3 } {
     is($list->{$loopback}, '127.0.0.1', "loopback interface is 127.0.0.1");
 }
 
-BEGIN { $tests += 4 } {
+BEGIN { $tests += 4 } SKIP: {
+    eval { rdev("127.0.0.1") };
+    skip "rdev() is not implemented on this system", 4
+        if $@ =~ /rdev\(\) is not implemented on this system/;
+    
     is( rdev('127.0.0.1'), $loopback, "rdev('127.0.0.1') => $loopback" );
     is( rdev('localhost'), $loopback, "rdev('localhost') => $loopback" );
 
@@ -31,5 +35,4 @@ BEGIN { $tests += 4 } {
     $r = rdev('cisco.com');
     ok( $r, "rdev('cisco.com') => $r" );
 }
-
 

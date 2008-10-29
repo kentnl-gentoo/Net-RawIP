@@ -9,6 +9,8 @@ use Net::RawIP;
 
 plan skip_all  => "Proc::ProcessTable is needed for this test"
     unless eval "use Proc::ProcessTable; 1";
+plan skip_all  => "Proc::ProcessTable does not support the size attribute on this platform"
+    unless eval { my $s = get_process_size($$) };
 
 plan tests => my $tests;
 

@@ -30,33 +30,6 @@ my @object_methods = qw(
     
 );
 
-# subs defined in lib/New/RawIP.pm
-qw<
-    N2L
-    _pack
-    _unpack
-    bset
-    ethnew
-    ethsend
-    ethset
-    generic_default
-    get
-    icmp_default
-    mac
-    n2L
-    packet
-    pcapinit
-    pcapinit_offline
-    proto
-    rdev
-    s2i
-    send
-    send_eth_frame
-    set
-    tcp_default
-    udp_default
->;
-
 
 # tests plan
 plan tests => 1 + 2 * @exported_functions + 1 * @class_methods + 2 + 2 * @object_methods;
@@ -85,3 +58,30 @@ for my $method (@object_methods) {
     can_ok($object, $method);
 }
 
+__END__
+
+# subs defined in lib/New/RawIP.pm
+qw<
+    N2L
+    _pack
+    _unpack
+    bset
+    ethnew
+    ethsend
+    ethset
+    generic_default
+    get
+    icmp_default
+    mac
+    n2L
+    packet
+    pcapinit
+    pcapinit_offline
+    proto
+    s2i
+    send
+    send_eth_frame
+    set
+    tcp_default
+    udp_default
+>;

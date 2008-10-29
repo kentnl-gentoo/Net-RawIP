@@ -1,7 +1,7 @@
 --- #YAML:1.0
 name:                Net-RawIP
-version:             0.24
-abstract:            Perl extension for manipulate raw ip packets with interface to B<libpcap>
+version:             0.25
+abstract:            Perl extension to manipulate raw IP packets with interface to B<libpcap>
 license:             perl
 author:              
     - Sebastien Aperghis-Tramoni <sebastien@aperghis.net>

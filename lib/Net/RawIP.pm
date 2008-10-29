@@ -1,12 +1,10 @@
-# Main package 
 package Net::RawIP;
 use strict;
 use warnings;
 
+use AutoLoader ();
 use Carp;
-use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $AUTOLOAD);
-use subs qw(timem ifaddrlist);
-
+use Exporter ();
 use English qw( -no_match_vars );
 use Net::RawIP::iphdr;
 use Net::RawIP::tcphdr;
@@ -16,9 +14,11 @@ use Net::RawIP::generichdr;
 use Net::RawIP::opt;
 use Net::RawIP::ethhdr;
 
-require Exporter;
-require DynaLoader;
-require AutoLoader;
+
+use vars qw($VERSION @ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $AUTOLOAD);
+use subs qw(timem ifaddrlist);
+
+$VERSION = "0.25";
 @ISA = qw(Exporter DynaLoader);
 
 @EXPORT = qw(timem open_live dump_open dispatch dump loop linkoffset ifaddrlist rdev);
@@ -38,7 +38,17 @@ timem linkoffset ifaddrlist rdev)
                             ]
 );
 
-$VERSION = '0.24';
+# load the shared object
+eval {
+    require XSLoader;
+    XSLoader::load("Net::RawIP", $VERSION);
+    1
+} or do {
+    require DynaLoader;
+    push @ISA, "DynaLoader";
+    bootstrap Net::RawIP $VERSION;
+};
+
 
 # The number of members in the sub modules
 my %n = (
@@ -66,7 +76,6 @@ sub AUTOLOAD {
     *$AUTOLOAD = sub () { $val };
     goto &$AUTOLOAD;
 }
-bootstrap Net::RawIP $VERSION;
 
 
 # The constructor
@@ -646,23 +655,34 @@ sub pcapinit_offline {
 }
 
 sub rdev {
+    my ($addr) = @_;
+
+    return unless defined $addr and $addr;
+
     my $rdev;
-    my $ip = ($_[0] =~ /^-?\d+$/) ? $_[0] : host_to_ip($_[0]);
-    my $ipn = unpack("I",pack("N",$ip));
-    if (($rdev = ip_rt_dev($ipn)) eq 'proc'){
-        my($dest,$mask);
-        open (my $route, '<', '/proc/net/route') || croak "Can't open /proc/net/route: $!";
+    my $ip  = ($addr =~ /^-?\d+$/) ? $addr : host_to_ip($addr);
+    my $ipn = unpack("I", pack("N", $ip));
+
+    if (($rdev = ip_rt_dev($ipn)) eq "proc") {
+        my ($dest, $mask);
+        open(my $route, "<", "/proc/net/route")
+            or croak "Can't open /proc/net/route: $!";
+
         while (<$route>) {
             next if /Destination/;
-            ($rdev,$dest,$mask) = (split(/\s+/))[0,1,7];
+            ($rdev, $dest, $mask) = (split(/\s+/))[0,1,7];
             last unless ($ipn & hex($mask)) ^ hex($dest);
         }
-        CORE::close($route);
+
+        close($route);
         $rdev = 'lo' unless ($ip & 0xFF000000) ^ 0x7f000000; # For Linux 2.2.x 
     }
+
     croak "rdev(): Destination unreachable" unless $rdev;
+
     # The aliasing support
     $rdev =~ s/([^:]+)(:.+)?/$1/;
+
     return $rdev;    
 }
 
@@ -672,16 +692,23 @@ sub DESTROY {
     closefd($self->{tap}) if exists $self->{tap};
 }
 
-1;
+
+"Rawhide!!"
+
 __END__
 
 =head1 NAME
 
-Net::RawIP - Perl extension for manipulate raw ip packets with interface to B<libpcap>
+Net::RawIP - Perl extension to manipulate raw IP packets with interface to B<libpcap>
+
+=head VERSION
+
+This is the documentation of C<Net::RawIP> version 0.25
 
 =head1 SYNOPSIS
 
   use Net::RawIP;
+
   $n = Net::RawIP->new({
                         ip  => {
                                 saddr => 'my.target.lan',
@@ -703,13 +730,21 @@ Net::RawIP - Perl extension for manipulate raw ip packets with interface to B<li
   $f = dump_open($p, "/my/home/log");
   loop($p, 10, \&dump, $f);
 
+
 =head1 DESCRIPTION
 
-This package provides a class object which can be used for
-creating, manipulating and sending raw ip packets with
-optional features for manipulating ethernet headers.
+This package provides a class which can be used for
+creating, manipulating and sending raw IP packets with
+optional features for manipulating Ethernet headers.
 
-B<NOTE:> Ethernet related methods are implemented on Linux and *BSD only
+B<Note:> Ethernet related methods are implemented on Linux and *BSD only.
+
+As its name implies, this module is quite low-level, and currently 
+duplicates some features with C<Net::Pcap>. If you prefer a 
+higher-level module (in terms of Perl support), please take a look
+at C<Net::Write>, which provides a portable interface to construct 
+and send raw packets on the network.
+
 
 =head1 Exported constants
 
@@ -792,29 +827,47 @@ If ARGPROTO is B<generic> PROTOKEY can be B<data> only.
 The B<data> entries are scalars containing packed network byte order
 data.
 
-As the real icmp packet is a C union one can specify specify only one 
+As the real icmp packet is a C union one can specify only one 
 of the following set of values.
 
-=over 4
+=over
 
-=item B<gateway> - (int)
+=item *
 
-=item (B<id> and B<sequence>) - (short and short)
+B<gateway> - (int)
 
-=item (B<mtu> and B<unused>) - (short and short)
+=item *
+
+(B<id> and B<sequence>) - (short and short)
+
+=item *
+
+(B<mtu> and B<unused>) - (short and short)
 
 =back
 
 
-The default values are 
+The default values are:
+
+=over
+
+=item *
 
 (0,0,0,0,5,0,0,0,0,0,0,0,0,0xffff,0,0,'') for tcp
 
+=item *
+
 (0,0,0,0,0,0,0,0,'') for icmp
+
+=item *
 
 (0,0,0,0,'') for udp
 
+=item *
+
 ('') for generic
+
+=back
 
 The valid values for B<urg> B<ack> B<psh> B<rst> B<syn> B<fin> are 0 or 1.
 The value of B<data> is a string. Length of the result packet will be calculated
@@ -845,14 +898,25 @@ or
 
 The default values of the B<ip> hash are 
 
+=over
+
+=item *
+
 (4,5,16,0,0,0x4000,64,6,0,0,0) for B<tcp>
+
+=item *
 
 (4,5,16,0,0,0x4000,64,17,0,0,0) for B<udp>
 
+=item *
+
 (4,5,16,0,0,0x4000,64,1,0,0,0) for B<icmp>
+
+=item *
 
 (4,5,16,0,0,0x4000,64,0,0,0,0) for B<generic>
 
+=back
 
 =item dump_open
 
@@ -870,7 +934,7 @@ reference and it can be dereferenced in a perl callback.
 
 =item next
 
-B<next> returns a string (next packet).
+B<next()> returns a string (next packet).
 
 =item timem
 
@@ -882,6 +946,7 @@ left side of B<microsec> for adjusting to six digits.
 
 Similar to sprintf("%.6f", Time::HiRes::time());
 
+=for comment
 TODO: replace this function with use of Time::HiRes ?
 
 =item linkoffset
@@ -893,13 +958,13 @@ by open_live.
 
 =item ifaddrlist
 
-B<ifaddrlist> returns a hash reference. In this hash keys are 
+B<ifaddrlist()> returns a hash reference. In this hash keys are 
 the running network devices, values are ip addresses of those devices 
 in an internet address format.
 
 =item rdev
 
-B<rdev> returns a name of the outgoing device for given destination address.
+B<rdev()> returns a name of the outgoing device for given destination address.
 It has one input parameter (destination address in an internet address
 or a domain name or a host byteorder int formats).
 
@@ -910,17 +975,17 @@ No input parameters.
 
 =item packet
 
-returns a scalar which contain the packed ip packet of the current object.
+Returns a scalar which contain the packed ip packet of the current object.
 No input parameters.
 
 =item set
 
-is a method for set the parameters to the current object. The given parameters
+Method for setting the parameters of the current object. The given parameters
 must look like the parameters for the constructor.
 
 =item bset($packet,$eth)
 
-is a method for set the parameters for the current object.
+Method for setting the parameters of the current object.
 B<$packet> is a scalar which contain binary structure (an ip or an eth packet).
 This scalar must match with the subclass of the current object.
 If B<$eth> is given and it have a non-zero value then assumed that packet is a
@@ -966,7 +1031,8 @@ If you do specify for the times a negative value then packet will be sent foreve
 E.g. you want to send the packet for ten times with delay equal to one second.
 Here is a code :
 
-$packet->send(1,10);
+    $packet->send(1,10);
+
 The delay could be specified not only as integer but 
 and as 0.25 for sleep to 250 ms or 3.5 to sleep for 3 seconds and 500 ms.
 
@@ -1046,12 +1112,12 @@ all types,lengths,datas of an options will be returned.
 E.g. you want to know all the IP options from the current object.
 Here is a code:
 
-@opts = $n->optget(ip => {});
+    @opts = $n->optget(ip => {});
 
 E.g. you want to know just the IP options with the type which equal to 131 and 137.
 Here is a code:
 
-($t131,$l131,$d131,$t137,$l137,$d137) = $n->optget(
+    ($t131,$l131,$d131,$t137,$l137,$d137) = $n->optget(
                                    ip =>{
                         type =>[(131,137)]
                         }        );                        
@@ -1065,14 +1131,25 @@ The parameters for this method are the B<OPTPROTO>'s.
 E.g. you want to unset an IP options.
 Here is a code:
 
-$n->optunset('ip');
+    $n->optunset('ip');
 
 E.g. you want to unset a TCP and an IP options.
 Here is a code:
 
-$n->optunset('ip','tcp');
+    $n->optunset('ip','tcp');
 
 =back
+
+
+=head1 SEE ALSO
+
+pcap(3), tcpdump(1), RFC 791-793, RFC 768.
+
+L<Net::Pcap>, L<Net::Pcap::Easy>, L<Net::Pcap::Reassemble>,
+L<Net::Pcap::FindDevice>
+
+L<Net::Write> for an alternative module to send raw packets on the network
+
 
 =head1 AUTHORS
 
@@ -1103,13 +1180,6 @@ as Perl itself.
 
 Steve Bonds <u5rhsiz02@sneakemail.com>
   + work on some endianness bugs and improving code comments
-
-=head1 SEE ALSO
-
-perl(1), Net::RawIP::libpcap(3pm), tcpdump(1), RFC 791-793, RFC 768.
-
-L<Net::Pcap>, L<Net::Pcap::Reassemble>, L<Net::PcapUtils>
-L<Net::Pcap::FindDevice>
 
 =cut
 

@@ -6,7 +6,7 @@ use ExtUtils::MakeMaker;
 
 my %config = (
     'linux' => [
-        '-D_LINUX_ -D_ETH_ -D_IFLIST_ ' . (defined $ENV{CFLAGS} ? $ENV{'CFLAGS'} : ''),
+        '-D_LINUX_ -D_ETH_ -D_IFLIST_',
         'RawIP.o util.o eth.o ifaddrlist.o',
         '',
         q{ $def .= ' -D_GLIBC_' if -e "/usr/include/net/if_packet.h" }, 
@@ -49,7 +49,7 @@ $config{darwin} = $config{freebsd};
 $config{netbsd} = $config{freebsd};
 
 my $name = $Config{osname} || "others"; 
-my $def = $config{$name}->[0];
+my $def = $config{$name}->[0] . (defined $ENV{CFLAGS} ? " $ENV{'CFLAGS'}" : "");
 my $obj = $config{$name}->[1];
 print $config{$name}->[2];
 eval $config{$name}->[3];
