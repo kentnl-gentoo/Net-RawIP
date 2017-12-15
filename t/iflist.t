@@ -32,6 +32,8 @@ BEGIN { $tests += 4 } SKIP: {
     like( $@, qr{host_to_ip: failed}, "rdev('ab cd') => undef" );
 
     # this test will fail if there is not network connection
+    skip "NO_NETWORK_TESTING=1", 1
+        if 1 eq  ( $ENV{NO_NETWORK_TESTING} || '0' );
     $r = rdev('cisco.com');
     ok( $r, "rdev('cisco.com') => $r" );
 }
